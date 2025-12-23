@@ -818,7 +818,7 @@ do
           -- DA1 response that should come after the OSC 11 response if the
           -- terminal supports it.
           if string.match(resp, '^\x1b%[%?.-c$') then
-            -- print("received DA1 resp")
+            -- print("received DA1 resp. was bg_response_received?", bg_response_received)
             bg_detection_complete = true
             -- if not bg_response_received then
             --   return true
@@ -875,7 +875,7 @@ do
 
       -- Send OSC 11 query along with DA1 request to determine whether terminal
       -- supports the query. #32109
-      vim.api.nvim_ui_send('\027]11;?\x1b\\\027[c')
+      vim.api.nvim_ui_send('\027]11;?\007\027[c')
 
       -- Wait until detection of OSC 11 capabilities is complete to
       -- ensure background is automatically set before user config.
