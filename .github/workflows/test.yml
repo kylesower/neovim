@@ -258,6 +258,9 @@ jobs:
 
   windows:
     uses: ./.github/workflows/test_windows.yml
+    with:
+      test_file: ${{ env.TEST_FILE }}
+      test_filter: ${{ env.TEST_FILTER }}
 
   # with-external-deps:
   #   runs-on: ubuntu-24.04-arm
