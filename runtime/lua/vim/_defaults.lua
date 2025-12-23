@@ -818,7 +818,7 @@ do
           -- DA1 response that should come after the OSC 11 response if the
           -- terminal supports it.
           if string.match(resp, '^\x1b%[%?.-c$') then
-            -- print("received DA1 resp. was bg_response_received?", bg_response_received)
+            print("received DA1 resp. was bg_response_received?", bg_response_received)
             bg_detection_complete = true
             -- if not bg_response_received then
             --   return true
