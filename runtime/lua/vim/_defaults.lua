@@ -813,7 +813,7 @@ do
         desc = "Update the value of 'background' automatically based on the terminal emulator's background color",
         callback = function(args)
           local resp = args.data.sequence ---@type string
-          -- print("TermResponse: handling resp:", resp)
+          print("TermResponse: handling resp:", resp)
 
           -- DA1 response that should come after the OSC 11 response if the
           -- terminal supports it.
@@ -876,7 +876,7 @@ do
       -- Send OSC 11 query along with DA1 request to determine whether terminal
       -- supports the query. #32109
       vim.api.nvim_ui_send('\027]11;?\007')
-      vim.api.nvim_ui_send('\027[c')
+      -- vim.api.nvim_ui_send('\027[c')
 
       -- Wait until detection of OSC 11 capabilities is complete to
       -- ensure background is automatically set before user config.
