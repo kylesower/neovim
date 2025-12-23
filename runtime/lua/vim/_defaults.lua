@@ -875,14 +875,14 @@ do
 
       -- Send OSC 11 query along with DA1 request to determine whether terminal
       -- supports the query. #32109
-      vim.api.nvim_ui_send('\027]11;?\007')
+      vim.api.nvim_ui_send('\027]11;?\007\027[c')
       -- vim.api.nvim_ui_send('\027[c')
 
       -- Wait until detection of OSC 11 capabilities is complete to
       -- ensure background is automatically set before user config.
-      vim.wait(1000, function()
-        return bg_detection_complete
-      end, 1)
+      -- vim.wait(1000, function()
+      --   return bg_detection_complete
+      -- end, 1)
 
     end
 
