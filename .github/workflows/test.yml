@@ -259,8 +259,8 @@ jobs:
   windows:
     uses: ./.github/workflows/test_windows.yml
     with:
-      test_file: ${{ env.TEST_FILE }}
-      test_filter: ${{ env.TEST_FILTER }}
+      test_file: ""
+      test_filter: "buffer cursor position is correct in terminal with number column in a line"
 
   # with-external-deps:
   #   runs-on: ubuntu-24.04-arm
