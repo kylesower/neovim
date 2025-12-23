@@ -7,8 +7,6 @@ on:
       functionaltest_timeout:
         default: 20
         type: number
-      test_file:
-        type: string
       test_filter:
         type: string
   workflow_dispatch:
@@ -58,7 +56,6 @@ jobs:
       - if: ${{ matrix.test == 'functional' }}
         name: functionaltest
         env:
-          TEST_FILE: ${{ inputs.test_file }}
           TEST_FILTER: ${{ inputs.test_filter }}
         timeout-minutes: ${{ inputs.functionaltest_timeout }}
         run: cmake --build build --target functionaltest
