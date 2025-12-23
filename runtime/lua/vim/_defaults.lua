@@ -813,7 +813,7 @@ do
         desc = "Update the value of 'background' automatically based on the terminal emulator's background color",
         callback = function(args)
           local resp = args.data.sequence ---@type string
-          print("TermResponse: handling resp:", resp)
+          -- print("TermResponse: handling resp:", resp)
 
           -- DA1 response that should come after the OSC 11 response if the
           -- terminal supports it.
@@ -880,9 +880,13 @@ do
 
       -- Wait until detection of OSC 11 capabilities is complete to
       -- ensure background is automatically set before user config.
-      -- vim.wait(1000, function()
-      --   return bg_detection_complete
-      -- end, 1)
+      if not vim.in_fast_event() then
+        vim.wait(1000, function()
+          return bg_detection_complete
+        end, 1)
+      else
+        print("skipping wait in fast event")
+      end
 
     end
 
