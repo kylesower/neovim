@@ -861,8 +861,8 @@ do
         once = true,
         callback = function()
           local optinfo = vim.api.nvim_get_option_info2('background', {})
-          local cmdline_sid = -3
-          if optinfo.last_set_sid > 0 or optinfo.last_set_sid == cmdline_sid then
+          local sid_lua = -8
+          if optinfo.was_set and optinfo.last_set_sid ~= sid_lua then
             pcall(function()
               vim.api.nvim_del_autocmd(id)
             end)
@@ -872,13 +872,18 @@ do
 
       -- Send OSC 11 query along with DA1 request to determine whether terminal
       -- supports the query. #32109
-      vim.api.nvim_ui_send('\027]11;?\007\027[c')
+      local sysname = vim.uv.os_uname().sysname:lower()
+      if sysname:find('windows') or sysname:find('mingw') then
+        vim.api.nvim_ui_send('\027]11;?\007')
+      else
+        vim.api.nvim_ui_send('\027]11;?\007\027[c')
+        -- Wait until detection of OSC 11 capabilities is complete to
+        -- ensure background is automatically set before user config.
+        vim.wait(100, function()
+          return bg_detection_complete
+        end, 1)
+      end
 
-      -- Wait until detection of OSC 11 capabilities is complete to
-      -- ensure background is automatically set before user config.
-      vim.wait(100, function()
-        return bg_detection_complete
-      end, 1)
     end
 
     --- If the TUI (term_has_truecolor) was able to determine that the host
