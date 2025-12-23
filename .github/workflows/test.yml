@@ -24,8 +24,8 @@ env:
   NVIM_LOG_FILE: ${{ github.workspace }}/build/.nvimlog
   TSAN_OPTIONS: log_path=${{ github.workspace }}/build/log/tsan
   VALGRIND_LOG: ${{ github.workspace }}/build/log/valgrind-%p.log
-  # TEST_FILE: test/functional/core/startup_spec.lua
-  # TEST_FILTER: foo
+  # TEST_FILE: test/functional/terminal/cursor_spec.lua
+  TEST_FILTER: "buffer cursor position is correct in terminal with number column in a line"
 
 jobs:
   # lint:

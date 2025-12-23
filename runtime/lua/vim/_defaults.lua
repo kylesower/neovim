@@ -872,17 +872,13 @@ do
 
       -- Send OSC 11 query along with DA1 request to determine whether terminal
       -- supports the query. #32109
-      local sysname = vim.uv.os_uname().sysname:lower()
-      if sysname:find('windows') or sysname:find('mingw') then
-        vim.api.nvim_ui_send('\027]11;?\007')
-      else
-        vim.api.nvim_ui_send('\027]11;?\007\027[c')
-        -- Wait until detection of OSC 11 capabilities is complete to
-        -- ensure background is automatically set before user config.
-        vim.wait(100, function()
-          return bg_detection_complete
-        end, 1)
-      end
+      vim.api.nvim_ui_send('\027]11;?\007\027[c')
+
+      -- Wait until detection of OSC 11 capabilities is complete to
+      -- ensure background is automatically set before user config.
+      vim.wait(1000, function()
+        return bg_detection_complete
+      end, 1)
 
     end
 
