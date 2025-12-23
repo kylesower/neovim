@@ -2758,15 +2758,15 @@ describe('TUI', function()
       [100] = { background = Screen.colors.NvimLightGrey2, foreground = Screen.colors.NvimDarkCyan },
       [101] = {
         background = Screen.colors.NvimLightGrey2,
-        foreground = Screen.colors.NvimDarkGray2,
+        foreground = Screen.colors.NvimDarkGrey2,
       },
       [102] = {
         background = Screen.colors.NvimLightGrey2,
-        foreground = Screen.colors.NvimLightGray4,
+        foreground = Screen.colors.NvimLightGrey4,
       },
       [103] = {
-        background = Screen.colors.NvimLightGray4,
-        foreground = Screen.colors.NvimDarkGray2,
+        background = Screen.colors.NvimLightGrey4,
+        foreground = Screen.colors.NvimDarkGrey2,
       },
     })
     screen:expect([[
@@ -2796,7 +2796,7 @@ describe('TUI', function()
     screen:set_option('rgb', true)
     screen:add_extra_attr_ids({
       [100] = {
-        background = Screen.colors.NvimLightGray2,
+        background = Screen.colors.NvimLightGrey2,
         foreground = Screen.colors.NvimDarkGrey2,
       },
       [101] = {
