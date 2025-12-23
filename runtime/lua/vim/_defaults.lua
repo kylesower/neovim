@@ -813,10 +813,12 @@ do
         desc = "Update the value of 'background' automatically based on the terminal emulator's background color",
         callback = function(args)
           local resp = args.data.sequence ---@type string
+          print("TermResponse: handling resp:", resp)
 
           -- DA1 response that should come after the OSC 11 response if the
           -- terminal supports it.
           if string.match(resp, '^\x1b%[%?.-c$') then
+            print("received DA1 resp")
             bg_detection_complete = true
             if not bg_response_received then
               return true
@@ -832,6 +834,7 @@ do
 
             if rr and gg and bb then
               bg_response_received = true
+              print("received bg response")
 
               local luminance = (0.299 * rr) + (0.587 * gg) + (0.114 * bb)
               local bg = luminance < 0.5 and 'dark' or 'light'
