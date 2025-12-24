@@ -55,7 +55,7 @@ jobs:
         name: functionaltest
         timeout-minutes: ${{ inputs.functionaltest_timeout }}
         env:
-          TEST_FILTER: "buffer cursor position is correct in terminal"
+          TEST_FILTER: "buffer cursor position is correct in terminal with number column in a line with no multibyte chars or trailing spaces"
           TEST_FILE: test/functional/terminal/cursor_spec.lua
         run: cmake --build build --target functionaltest
 

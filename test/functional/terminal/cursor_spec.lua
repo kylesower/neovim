@@ -845,6 +845,7 @@ describe('buffer cursor position is correct in terminal with number column', fun
     }, {
       cols = 70,
     })
+    screen:redraw_debug()
     screen:expect([[
       {121:  1 }                                                                  |
       {121:  2 }                                                                  |

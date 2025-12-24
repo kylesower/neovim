@@ -819,8 +819,8 @@ do
           -- terminal supports it.
           if string.match(resp, '^\x1b%[%?.-c$') then
             did_bg_detection = true
-            did_del_autocmd = false
-            return false
+            did_del_autocmd = not did_bg_response
+            return did_del_autocmd
           end
 
           local r, g, b = parseosc11(resp)
