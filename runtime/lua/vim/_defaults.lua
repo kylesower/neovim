@@ -870,6 +870,17 @@ do
       -- Send OSC 11 query along with DA1 request to determine whether terminal
       -- supports the query. #32109
       vim.api.nvim_ui_send('\027]11;?\007\027[c')
+
+      vim.uv.sleep(2000)
+      -- vim.wait(1, function()
+      --   return false
+      -- end, 1)
+
+      -- Wait until detection of OSC 11 capabilities is complete to
+      -- ensure background is automatically set before user config.
+      -- vim.wait(100, function()
+      --   return did_bg_detection
+      -- end, 1)
     end
 
     --- If the TUI (term_has_truecolor) was able to determine that the host
