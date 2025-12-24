@@ -842,6 +842,8 @@ describe('buffer cursor position is correct in terminal with number column', fun
       'cnoremap <C-O> <Right>',
       '--cmd',
       'set notermguicolors',
+      '--cmd',
+      'set background?'
     }, {
       cols = 70,
     })
