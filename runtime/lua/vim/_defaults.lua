@@ -867,22 +867,9 @@ do
         end,
       })
 
-      local start_time = vim.uv.hrtime()
       -- Send OSC 11 query along with DA1 request to determine whether terminal
       -- supports the query. #32109
       vim.api.nvim_ui_send('\027]11;?\007\027[c')
-
-      -- Wait until detection of OSC 11 capabilities is complete to
-      -- ensure background is automatically set before user config.
-      if not vim.wait(100, function()
-        if did_bg_detection then
-          print("time to detect bg: %d ms", (vim.uv.hrtime() - start_time) / 1e6)
-        end
-
-        return did_bg_detection
-      end, 1) then
-        print("never finished bg detection in %d ms", (vim.uv.hrtime() - start_time) / 1e6)
-      end
     end
 
     --- If the TUI (term_has_truecolor) was able to determine that the host
