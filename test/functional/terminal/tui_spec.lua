@@ -3882,37 +3882,39 @@ describe('TUI bg color', function()
     ]])
   end)
 
-  it('applies during startup before setting color schemes #32109', function()
-    local plug_dir = 'Test_Colorscheme'
-    local sep = n.get_pathsep()
-    local colorscheme_folder = plug_dir .. sep .. 'colors'
-    mkdir_p(colorscheme_folder)
+  for _ = 1, 100 do
+    it('applies during startup before setting color schemes #32109', function()
+      local plug_dir = 'Test_Colorscheme'
+      local sep = n.get_pathsep()
+      local colorscheme_folder = plug_dir .. sep .. 'colors'
+      mkdir_p(colorscheme_folder)
 
-    local colorscheme_file = table.concat({ colorscheme_folder, 'custom_colorscheme.lua' }, sep)
-    write_file(
-      colorscheme_file,
-      [[
-        print('applying', vim.o.background, 'colors')
-      ]]
-    )
-    finally(function()
-      rmdir(plug_dir)
+      local colorscheme_file = table.concat({ colorscheme_folder, 'custom_colorscheme.lua' }, sep)
+      write_file(
+        colorscheme_file,
+        [[
+          print('applying', vim.o.background, 'colors')
+        ]]
+      )
+      finally(function()
+        rmdir(plug_dir)
+      end)
+      local screen = tt.setup_child_nvim({
+        '--clean',
+        '--cmd',
+        'set rtp+=' .. plug_dir,
+        '--cmd',
+        'colorscheme custom_colorscheme',
+      })
+      screen:expect([[
+        ^                                                  |
+        ~                                                 |*3
+        [No Name]                       0,0-1          All|
+        applying light colors                             |
+        {5:-- TERMINAL --}                                    |
+      ]])
     end)
-    local screen = tt.setup_child_nvim({
-      '--clean',
-      '--cmd',
-      'set rtp+=' .. plug_dir,
-      '--cmd',
-      'colorscheme custom_colorscheme',
-    })
-    screen:expect([[
-      ^                                                  |
-      ~                                                 |*3
-      [No Name]                       0,0-1          All|
-      applying light colors                             |
-      {5:-- TERMINAL --}                                    |
-    ]])
-  end)
+  end
 
   it('sends theme update notifications when background changes #31652', function()
     command('set background=dark') -- set outer Nvim background
