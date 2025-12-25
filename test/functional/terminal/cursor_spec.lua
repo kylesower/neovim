@@ -845,7 +845,6 @@ describe('buffer cursor position is correct in terminal with number column', fun
     }, {
       cols = 70,
     })
-    n.poke_eventloop()
     screen:expect([[
       {121:  1 }                                                                  |
       {121:  2 }                                                                  |
