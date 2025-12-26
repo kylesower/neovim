@@ -4,6 +4,7 @@ on:
     branches:
       - 'master'
       - 'release-[0-9]+.[0-9]+'
+      - 'fix_freebsd'
   pull_request:
     branches:
       - 'master'
