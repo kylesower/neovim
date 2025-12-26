@@ -805,7 +805,7 @@ do
       -- an OSC 11 response from the terminal emulator. If the user has set
       -- 'background' explicitly then we will delete this autocommand,
       -- effectively disabling automatic background setting.
-      local da1_count = 0
+      local did_dsr_response = false
       local id = vim.api.nvim_create_autocmd('TermResponse', {
         group = group,
         nested = true,
@@ -813,12 +813,12 @@ do
         callback = function(args)
           local resp = args.data.sequence ---@type string
 
-          -- DA1 response that should come after the OSC 11 response if the
+          -- DSR response that should come after the OSC 11 response if the
           -- terminal supports it.
-          if string.match(resp, '^\x1b%[%?.-c$') then
-            da1_count = da1_count + 1
+          if string.match(resp, '^\x1b%[0n$') then
+            did_dsr_response = true
             -- Don't delete the autocmd because the bg response may come
-            -- after the DA1 response if the terminal handles requests out
+            -- after the DSR response if the terminal handles requests out
             -- of sequence. In that case, the background will simply be set
             -- later in the startup sequence.
             return false
@@ -870,20 +870,19 @@ do
         end,
       })
 
-      -- HACK:
-      -- Send OSC 11 query along with two DA1 requests to determine whether
-      -- terminal supports the query. We use two requests because the function
-      -- tui_query_kitty_keyboard sends a DA1 request as well. If we only
-      -- wait for a single DA1 response, it may or may not have come from
-      -- tui_query_kitty_keyboard. #32109
+      -- Send OSC 11 query along with DSR request to determine whether
+      -- terminal supports the query. If the DSR response comes first,
+      -- the terminal most likely doesn't support the bg color query,
+      -- and we don't have to keep waiting for a bg color response.
+      -- #32109
       local osc11 = '\027]11;?\007'
-      local da1 = '\027[c'
-      vim.api.nvim_ui_send(osc11 .. da1 .. da1)
+      local dsr = '\027[5n'
+      vim.api.nvim_ui_send(osc11 .. dsr)
 
       -- Wait until detection of OSC 11 capabilities is complete to
       -- ensure background is automatically set before user config.
       vim.wait(100, function()
-        return da1_count >= 2
+        return did_dsr_response
       end, 1)
     end
 
