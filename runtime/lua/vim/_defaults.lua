@@ -805,8 +805,7 @@ do
       -- an OSC 11 response from the terminal emulator. If the user has set
       -- 'background' explicitly then we will delete this autocommand,
       -- effectively disabling automatic background setting.
-      local did_bg_response = false
-      local did_bg_detection = false
+      local da1_count = 0
       local id = vim.api.nvim_create_autocmd('TermResponse', {
         group = group,
         nested = true,
@@ -817,7 +816,7 @@ do
           -- DA1 response that should come after the OSC 11 response if the
           -- terminal supports it.
           if string.match(resp, '^\x1b%[%?.-c$') then
-            did_bg_detection = true
+            da1_count = da1_count + 1
             -- Don't delete the autocmd because the bg response may come
             -- after the DA1 response if the terminal handles requests out
             -- of sequence. This can occur, for instance, in a nested Nvim 
@@ -834,8 +833,6 @@ do
             local bb = parsecolor(b)
 
             if rr and gg and bb then
-              did_bg_response = true
-
               local luminance = (0.299 * rr) + (0.587 * gg) + (0.114 * bb)
               local bg = luminance < 0.5 and 'dark' or 'light'
               vim.api.nvim_set_option_value('background', bg, {})
@@ -877,12 +874,12 @@ do
 
       -- Send OSC 11 query along with DA1 request to determine whether terminal
       -- supports the query. #32109
-      vim.api.nvim_ui_send('\027]11;?\007\027[c')
+      vim.api.nvim_ui_send('\027]11;?\007\027[c\027[c')
 
       -- Wait until detection of OSC 11 capabilities is complete to
       -- ensure background is automatically set before user config.
       vim.wait(100, function()
-        return did_bg_detection
+        return da1_count >= 2
       end, 1)
     end
 
