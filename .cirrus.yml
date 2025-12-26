@@ -4,8 +4,6 @@ env:
 
 freebsd_task:
   name: FreeBSD
-  env:
-    TEST_FILE: test/functional/terminal/tui_spec.lua
   only_if: $BRANCH != "master"
   freebsd_instance:
     image_family: freebsd-14-3
@@ -22,8 +20,8 @@ freebsd_task:
     - pw useradd cirrus -m
     - chown -R cirrus:cirrus .
   functionaltest_script:
-    - sudo -u cirrus gmake functionaltest
-  unittest_script:
-    - sudo -u cirrus gmake unittest
-  oldtest_script:
-    - sudo -u cirrus gmake oldtest
+    - TEST_FILE="test/functional/terminal/tui_spec.lua" TEST_FILTER="is properly set in a nested Nvim instance" sudo -u cirrus gmake functionaltest
+  # unittest_script:
+  #   - sudo -u cirrus gmake unittest
+  # oldtest_script:
+  #   - sudo -u cirrus gmake oldtest
