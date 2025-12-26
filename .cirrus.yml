@@ -4,6 +4,8 @@ env:
 
 freebsd_task:
   name: FreeBSD
+  env:
+    TEST_FILE: test/functional/terminal/tui_spec.lua
   only_if: $BRANCH != "master"
   freebsd_instance:
     image_family: freebsd-14-3
