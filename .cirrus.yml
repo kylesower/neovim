@@ -6,7 +6,7 @@ freebsd_task:
   name: FreeBSD
   env:
     TEST_FILE: test/functional/terminal/tui_spec.lua
-    TEST_FILTER: "is properly set in a nested Nvim instance"
+    TEST_FILTER: "TUI has no black flicker when clearing regions during startup with termguicolors"
   only_if: $BRANCH != "master"
   freebsd_instance:
     image_family: freebsd-14-3
