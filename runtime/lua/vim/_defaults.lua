@@ -812,13 +812,11 @@ do
         nested = true,
         desc = "Update the value of 'background' automatically based on the terminal emulator's background color",
         callback = function(args)
-          print("handling TermResponse")
           local resp = args.data.sequence ---@type string
 
           -- DA1 response that should come after the OSC 11 response if the
           -- terminal supports it.
           if string.match(resp, '^\x1b%[%?.-c$') then
-            print("got DA1 response")
             did_bg_detection = true
             return not did_bg_response
           end
@@ -835,7 +833,6 @@ do
               local luminance = (0.299 * rr) + (0.587 * gg) + (0.114 * bb)
               local bg = luminance < 0.5 and 'dark' or 'light'
               vim.api.nvim_set_option_value('background', bg, {})
-              print("got bg response. setting bg to:", bg)
 
               -- Ensure OptionSet still triggers when we set the background during startup
               if vim.v.vim_did_enter == 0 then
@@ -878,11 +875,9 @@ do
 
       -- Wait until detection of OSC 11 capabilities is complete to
       -- ensure background is automatically set before user config.
-      if not vim.wait(100, function()
+      vim.wait(100, function()
         return did_bg_detection
-      end, 1) then
-        print("never finished bg detection")
-      end
+      end, 1)
     end
 
     --- If the TUI (term_has_truecolor) was able to determine that the host
