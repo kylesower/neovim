@@ -851,6 +851,14 @@ do
           end
         end,
       })
+      vim.api.nvim_create_autocmd('OptionSet', {
+        pattern = "background",
+        callback = function(args)
+          if vim.env.NVIM then
+            print(vim.o.background)
+          end
+        end
+      })
 
       vim.api.nvim_create_autocmd('VimEnter', {
         group = group,
