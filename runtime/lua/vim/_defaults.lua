@@ -830,12 +830,12 @@ do
             local bb = parsecolor(b)
 
             if rr and gg and bb then
-              print("got bg response")
               did_bg_response = true
 
               local luminance = (0.299 * rr) + (0.587 * gg) + (0.114 * bb)
               local bg = luminance < 0.5 and 'dark' or 'light'
               vim.api.nvim_set_option_value('background', bg, {})
+              print("got bg response. setting bg to:", bg)
 
               -- Ensure OptionSet still triggers when we set the background during startup
               if vim.v.vim_did_enter == 0 then
