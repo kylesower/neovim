@@ -819,54 +819,377 @@ describe('buffer cursor position is correct in terminal without number column', 
   end)
 end)
 
-describe('buffer cursor position is correct in terminal with number column', function()
-  if t.is_ci('cirrus') then
-    return
-  end
+for _ = 1, 10 do
+  describe('buffer cursor position is correct in terminal with number column', function()
+    if t.is_ci('cirrus') then
+      return
+    end
 
-  local screen
+    local screen
 
-  local function setup_ex_register(str)
-    screen = tt.setup_child_nvim({
-      '-u',
-      'NONE',
-      '-i',
-      'NONE',
-      '-E',
-      '--cmd',
-      string.format('let @r = "%s"', str),
-      -- <Left> and <Right> don't always work
-      '--cmd',
-      'cnoremap <C-X> <Left>',
-      '--cmd',
-      'cnoremap <C-O> <Right>',
-      '--cmd',
-      'set notermguicolors',
-    }, {
-      cols = 70,
-    })
-    screen:expect([[
-      {121:  1 }                                                                  |
-      {121:  2 }                                                                  |
-      {121:  3 }                                                                  |
-      {121:  4 }                                                                  |
-      {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
-      {121:  6 }:^                                                                 |
-      {5:-- TERMINAL --}                                                        |
-    ]])
-  end
+    local function setup_ex_register(str)
+      screen = tt.setup_child_nvim({
+        '-u',
+        'NONE',
+        '-i',
+        'NONE',
+        '-E',
+        '--cmd',
+        string.format('let @r = "%s"', str),
+        -- <Left> and <Right> don't always work
+        '--cmd',
+        'cnoremap <C-X> <Left>',
+        '--cmd',
+        'cnoremap <C-O> <Right>',
+        '--cmd',
+        'set notermguicolors',
+      }, {
+        cols = 70,
+      })
+      screen:expect([[
+        {121:  1 }                                                                  |
+        {121:  2 }                                                                  |
+        {121:  3 }                                                                  |
+        {121:  4 }                                                                  |
+        {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
+        {121:  6 }:^                                                                 |
+        {5:-- TERMINAL --}                                                        |
+      ]])
+    end
 
-  before_each(function()
-    clear()
-    command('au TermOpen * set number')
-  end)
-
-  describe('in a line with no multibyte chars or trailing spaces,', function()
     before_each(function()
-      setup_ex_register('aaaaaaaa')
+      clear()
+      command('au TermOpen * set number')
     end)
 
-    it('at the end', function()
+    describe('in a line with no multibyte chars or trailing spaces,', function()
+      before_each(function()
+        setup_ex_register('aaaaaaaa')
+      end)
+
+      it('at the end', function()
+        feed('<C-R>r')
+        screen:expect([[
+          {121:  1 }                                                                  |
+          {121:  2 }                                                                  |
+          {121:  3 }                                                                  |
+          {121:  4 }                                                                  |
+          {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
+          {121:  6 }:aaaaaaaa^                                                         |
+          {5:-- TERMINAL --}                                                        |
+        ]])
+        eq({ 6, 9 }, eval('nvim_win_get_cursor(0)'))
+        feed([[<C-\><C-N>]])
+        screen:expect([[
+          {121:  1 }                                                                  |
+          {121:  2 }                                                                  |
+          {121:  3 }                                                                  |
+          {121:  4 }                                                                  |
+          {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
+          {121:  6 }:aaaaaaa^a                                                         |
+                                                                                |
+        ]])
+        eq({ 6, 8 }, eval('nvim_win_get_cursor(0)'))
+      end)
+
+      it('near the end', function()
+        feed('<C-R>r<C-X><C-X>')
+        screen:expect([[
+          {121:  1 }                                                                  |
+          {121:  2 }                                                                  |
+          {121:  3 }                                                                  |
+          {121:  4 }                                                                  |
+          {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
+          {121:  6 }:aaaaaa^aa                                                         |
+          {5:-- TERMINAL --}                                                        |
+        ]])
+        eq({ 6, 7 }, eval('nvim_win_get_cursor(0)'))
+        feed([[<C-\><C-N>]])
+        screen:expect([[
+          {121:  1 }                                                                  |
+          {121:  2 }                                                                  |
+          {121:  3 }                                                                  |
+          {121:  4 }                                                                  |
+          {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
+          {121:  6 }:aaaaa^aaa                                                         |
+                                                                                |
+        ]])
+        eq({ 6, 6 }, eval('nvim_win_get_cursor(0)'))
+      end)
+
+      it('near the start', function()
+        feed('<C-R>r<C-B><C-O>')
+        screen:expect([[
+          {121:  1 }                                                                  |
+          {121:  2 }                                                                  |
+          {121:  3 }                                                                  |
+          {121:  4 }                                                                  |
+          {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
+          {121:  6 }:a^aaaaaaa                                                         |
+          {5:-- TERMINAL --}                                                        |
+        ]])
+        eq({ 6, 2 }, eval('nvim_win_get_cursor(0)'))
+        feed([[<C-\><C-N>]])
+        screen:expect([[
+          {121:  1 }                                                                  |
+          {121:  2 }                                                                  |
+          {121:  3 }                                                                  |
+          {121:  4 }                                                                  |
+          {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
+          {121:  6 }:^aaaaaaaa                                                         |
+                                                                                |
+        ]])
+        eq({ 6, 1 }, eval('nvim_win_get_cursor(0)'))
+      end)
+    end)
+
+    describe('in a line with single-cell multibyte chars and no trailing spaces,', function()
+      before_each(function()
+        setup_ex_register('µµµµµµµµ')
+      end)
+
+      it('at the end', function()
+        feed('<C-R>r')
+        screen:expect([[
+          {121:  1 }                                                                  |
+          {121:  2 }                                                                  |
+          {121:  3 }                                                                  |
+          {121:  4 }                                                                  |
+          {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
+          {121:  6 }:µµµµµµµµ^                                                         |
+          {5:-- TERMINAL --}                                                        |
+        ]])
+        eq({ 6, 17 }, eval('nvim_win_get_cursor(0)'))
+        feed([[<C-\><C-N>]])
+        screen:expect([[
+          {121:  1 }                                                                  |
+          {121:  2 }                                                                  |
+          {121:  3 }                                                                  |
+          {121:  4 }                                                                  |
+          {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
+          {121:  6 }:µµµµµµµ^µ                                                         |
+                                                                                |
+        ]])
+        eq({ 6, 15 }, eval('nvim_win_get_cursor(0)'))
+      end)
+
+      it('near the end', function()
+        feed('<C-R>r<C-X><C-X>')
+        screen:expect([[
+          {121:  1 }                                                                  |
+          {121:  2 }                                                                  |
+          {121:  3 }                                                                  |
+          {121:  4 }                                                                  |
+          {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
+          {121:  6 }:µµµµµµ^µµ                                                         |
+          {5:-- TERMINAL --}                                                        |
+        ]])
+        eq({ 6, 13 }, eval('nvim_win_get_cursor(0)'))
+        feed([[<C-\><C-N>]])
+        screen:expect([[
+          {121:  1 }                                                                  |
+          {121:  2 }                                                                  |
+          {121:  3 }                                                                  |
+          {121:  4 }                                                                  |
+          {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
+          {121:  6 }:µµµµµ^µµµ                                                         |
+                                                                                |
+        ]])
+        eq({ 6, 11 }, eval('nvim_win_get_cursor(0)'))
+      end)
+
+      it('near the start', function()
+        feed('<C-R>r<C-B><C-O>')
+        screen:expect([[
+          {121:  1 }                                                                  |
+          {121:  2 }                                                                  |
+          {121:  3 }                                                                  |
+          {121:  4 }                                                                  |
+          {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
+          {121:  6 }:µ^µµµµµµµ                                                         |
+          {5:-- TERMINAL --}                                                        |
+        ]])
+        eq({ 6, 3 }, eval('nvim_win_get_cursor(0)'))
+        feed([[<C-\><C-N>]])
+        screen:expect([[
+          {121:  1 }                                                                  |
+          {121:  2 }                                                                  |
+          {121:  3 }                                                                  |
+          {121:  4 }                                                                  |
+          {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
+          {121:  6 }:^µµµµµµµµ                                                         |
+                                                                                |
+        ]])
+        eq({ 6, 1 }, eval('nvim_win_get_cursor(0)'))
+      end)
+    end)
+
+    describe('in a line with single-cell composed multibyte chars and no trailing spaces,', function()
+      before_each(function()
+        setup_ex_register('µ̳µ̳µ̳µ̳µ̳µ̳µ̳µ̳')
+      end)
+
+      it('at the end', function()
+        feed('<C-R>r')
+        screen:expect([[
+          {121:  1 }                                                                  |
+          {121:  2 }                                                                  |
+          {121:  3 }                                                                  |
+          {121:  4 }                                                                  |
+          {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
+          {121:  6 }:µ̳µ̳µ̳µ̳µ̳µ̳µ̳µ̳^                                                         |
+          {5:-- TERMINAL --}                                                        |
+        ]])
+        eq({ 6, 33 }, eval('nvim_win_get_cursor(0)'))
+        feed([[<C-\><C-N>]])
+        screen:expect([[
+          {121:  1 }                                                                  |
+          {121:  2 }                                                                  |
+          {121:  3 }                                                                  |
+          {121:  4 }                                                                  |
+          {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
+          {121:  6 }:µ̳µ̳µ̳µ̳µ̳µ̳µ̳^µ̳                                                         |
+                                                                                |
+        ]])
+        eq({ 6, 29 }, eval('nvim_win_get_cursor(0)'))
+      end)
+
+      it('near the end', function()
+        skip(is_os('win'))
+        feed('<C-R>r<C-X><C-X>')
+        screen:expect([[
+          {121:  1 }                                                                  |
+          {121:  2 }                                                                  |
+          {121:  3 }                                                                  |
+          {121:  4 }                                                                  |
+          {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
+          {121:  6 }:µ̳µ̳µ̳µ̳µ̳µ̳^µ̳µ̳                                                         |
+          {5:-- TERMINAL --}                                                        |
+        ]])
+        eq({ 6, 25 }, eval('nvim_win_get_cursor(0)'))
+        feed([[<C-\><C-N>]])
+        screen:expect([[
+          {121:  1 }                                                                  |
+          {121:  2 }                                                                  |
+          {121:  3 }                                                                  |
+          {121:  4 }                                                                  |
+          {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
+          {121:  6 }:µ̳µ̳µ̳µ̳µ̳^µ̳µ̳µ̳                                                         |
+                                                                                |
+        ]])
+        eq({ 6, 21 }, eval('nvim_win_get_cursor(0)'))
+      end)
+
+      it('near the start', function()
+        skip(is_os('win'))
+        feed('<C-R>r<C-B><C-O>')
+        screen:expect([[
+          {121:  1 }                                                                  |
+          {121:  2 }                                                                  |
+          {121:  3 }                                                                  |
+          {121:  4 }                                                                  |
+          {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
+          {121:  6 }:µ̳^µ̳µ̳µ̳µ̳µ̳µ̳µ̳                                                         |
+          {5:-- TERMINAL --}                                                        |
+        ]])
+        eq({ 6, 5 }, eval('nvim_win_get_cursor(0)'))
+        feed([[<C-\><C-N>]])
+        screen:expect([[
+          {121:  1 }                                                                  |
+          {121:  2 }                                                                  |
+          {121:  3 }                                                                  |
+          {121:  4 }                                                                  |
+          {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
+          {121:  6 }:^µ̳µ̳µ̳µ̳µ̳µ̳µ̳µ̳                                                         |
+                                                                                |
+        ]])
+        eq({ 6, 1 }, eval('nvim_win_get_cursor(0)'))
+      end)
+    end)
+
+    describe('in a line with double-cell multibyte chars and no trailing spaces,', function()
+      before_each(function()
+        setup_ex_register('哦哦哦哦哦哦哦哦')
+      end)
+
+      it('at the end', function()
+        feed('<C-R>r')
+        screen:expect([[
+          {121:  1 }                                                                  |
+          {121:  2 }                                                                  |
+          {121:  3 }                                                                  |
+          {121:  4 }                                                                  |
+          {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
+          {121:  6 }:哦哦哦哦哦哦哦哦^                                                 |
+          {5:-- TERMINAL --}                                                        |
+        ]])
+        eq({ 6, 25 }, eval('nvim_win_get_cursor(0)'))
+        feed([[<C-\><C-N>]])
+        screen:expect([[
+          {121:  1 }                                                                  |
+          {121:  2 }                                                                  |
+          {121:  3 }                                                                  |
+          {121:  4 }                                                                  |
+          {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
+          {121:  6 }:哦哦哦哦哦哦哦^哦                                                 |
+                                                                                |
+        ]])
+        eq({ 6, 22 }, eval('nvim_win_get_cursor(0)'))
+      end)
+
+      it('near the end', function()
+        feed('<C-R>r<C-X><C-X>')
+        screen:expect([[
+          {121:  1 }                                                                  |
+          {121:  2 }                                                                  |
+          {121:  3 }                                                                  |
+          {121:  4 }                                                                  |
+          {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
+          {121:  6 }:哦哦哦哦哦哦^哦哦                                                 |
+          {5:-- TERMINAL --}                                                        |
+        ]])
+        eq({ 6, 19 }, eval('nvim_win_get_cursor(0)'))
+        feed([[<C-\><C-N>]])
+        screen:expect([[
+          {121:  1 }                                                                  |
+          {121:  2 }                                                                  |
+          {121:  3 }                                                                  |
+          {121:  4 }                                                                  |
+          {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
+          {121:  6 }:哦哦哦哦哦^哦哦哦                                                 |
+                                                                                |
+        ]])
+        eq({ 6, 16 }, eval('nvim_win_get_cursor(0)'))
+      end)
+
+      it('near the start', function()
+        feed('<C-R>r<C-B><C-O>')
+        screen:expect([[
+          {121:  1 }                                                                  |
+          {121:  2 }                                                                  |
+          {121:  3 }                                                                  |
+          {121:  4 }                                                                  |
+          {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
+          {121:  6 }:哦^哦哦哦哦哦哦哦                                                 |
+          {5:-- TERMINAL --}                                                        |
+        ]])
+        eq({ 6, 4 }, eval('nvim_win_get_cursor(0)'))
+        feed([[<C-\><C-N>]])
+        screen:expect([[
+          {121:  1 }                                                                  |
+          {121:  2 }                                                                  |
+          {121:  3 }                                                                  |
+          {121:  4 }                                                                  |
+          {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
+          {121:  6 }:^哦哦哦哦哦哦哦哦                                                 |
+                                                                                |
+        ]])
+        eq({ 6, 1 }, eval('nvim_win_get_cursor(0)'))
+      end)
+    end)
+
+    it('at the end of a line with trailing spaces #16234', function()
+      setup_ex_register('aaaaaaaa    ')
       feed('<C-R>r')
       screen:expect([[
         {121:  1 }                                                                  |
@@ -874,115 +1197,10 @@ describe('buffer cursor position is correct in terminal with number column', fun
         {121:  3 }                                                                  |
         {121:  4 }                                                                  |
         {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
-        {121:  6 }:aaaaaaaa^                                                         |
+        {121:  6 }:aaaaaaaa    ^                                                     |
         {5:-- TERMINAL --}                                                        |
       ]])
-      eq({ 6, 9 }, eval('nvim_win_get_cursor(0)'))
-      feed([[<C-\><C-N>]])
-      screen:expect([[
-        {121:  1 }                                                                  |
-        {121:  2 }                                                                  |
-        {121:  3 }                                                                  |
-        {121:  4 }                                                                  |
-        {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
-        {121:  6 }:aaaaaaa^a                                                         |
-                                                                              |
-      ]])
-      eq({ 6, 8 }, eval('nvim_win_get_cursor(0)'))
-    end)
-
-    it('near the end', function()
-      feed('<C-R>r<C-X><C-X>')
-      screen:expect([[
-        {121:  1 }                                                                  |
-        {121:  2 }                                                                  |
-        {121:  3 }                                                                  |
-        {121:  4 }                                                                  |
-        {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
-        {121:  6 }:aaaaaa^aa                                                         |
-        {5:-- TERMINAL --}                                                        |
-      ]])
-      eq({ 6, 7 }, eval('nvim_win_get_cursor(0)'))
-      feed([[<C-\><C-N>]])
-      screen:expect([[
-        {121:  1 }                                                                  |
-        {121:  2 }                                                                  |
-        {121:  3 }                                                                  |
-        {121:  4 }                                                                  |
-        {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
-        {121:  6 }:aaaaa^aaa                                                         |
-                                                                              |
-      ]])
-      eq({ 6, 6 }, eval('nvim_win_get_cursor(0)'))
-    end)
-
-    it('near the start', function()
-      feed('<C-R>r<C-B><C-O>')
-      screen:expect([[
-        {121:  1 }                                                                  |
-        {121:  2 }                                                                  |
-        {121:  3 }                                                                  |
-        {121:  4 }                                                                  |
-        {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
-        {121:  6 }:a^aaaaaaa                                                         |
-        {5:-- TERMINAL --}                                                        |
-      ]])
-      eq({ 6, 2 }, eval('nvim_win_get_cursor(0)'))
-      feed([[<C-\><C-N>]])
-      screen:expect([[
-        {121:  1 }                                                                  |
-        {121:  2 }                                                                  |
-        {121:  3 }                                                                  |
-        {121:  4 }                                                                  |
-        {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
-        {121:  6 }:^aaaaaaaa                                                         |
-                                                                              |
-      ]])
-      eq({ 6, 1 }, eval('nvim_win_get_cursor(0)'))
-    end)
-  end)
-
-  describe('in a line with single-cell multibyte chars and no trailing spaces,', function()
-    before_each(function()
-      setup_ex_register('µµµµµµµµ')
-    end)
-
-    it('at the end', function()
-      feed('<C-R>r')
-      screen:expect([[
-        {121:  1 }                                                                  |
-        {121:  2 }                                                                  |
-        {121:  3 }                                                                  |
-        {121:  4 }                                                                  |
-        {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
-        {121:  6 }:µµµµµµµµ^                                                         |
-        {5:-- TERMINAL --}                                                        |
-      ]])
-      eq({ 6, 17 }, eval('nvim_win_get_cursor(0)'))
-      feed([[<C-\><C-N>]])
-      screen:expect([[
-        {121:  1 }                                                                  |
-        {121:  2 }                                                                  |
-        {121:  3 }                                                                  |
-        {121:  4 }                                                                  |
-        {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
-        {121:  6 }:µµµµµµµ^µ                                                         |
-                                                                              |
-      ]])
-      eq({ 6, 15 }, eval('nvim_win_get_cursor(0)'))
-    end)
-
-    it('near the end', function()
-      feed('<C-R>r<C-X><C-X>')
-      screen:expect([[
-        {121:  1 }                                                                  |
-        {121:  2 }                                                                  |
-        {121:  3 }                                                                  |
-        {121:  4 }                                                                  |
-        {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
-        {121:  6 }:µµµµµµ^µµ                                                         |
-        {5:-- TERMINAL --}                                                        |
-      ]])
+      matches('^:aaaaaaaa    [ ]*$', eval('nvim_get_current_line()'))
       eq({ 6, 13 }, eval('nvim_win_get_cursor(0)'))
       feed([[<C-\><C-N>]])
       screen:expect([[
@@ -991,226 +1209,10 @@ describe('buffer cursor position is correct in terminal with number column', fun
         {121:  3 }                                                                  |
         {121:  4 }                                                                  |
         {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
-        {121:  6 }:µµµµµ^µµµ                                                         |
+        {121:  6 }:aaaaaaaa   ^                                                      |
                                                                               |
       ]])
-      eq({ 6, 11 }, eval('nvim_win_get_cursor(0)'))
-    end)
-
-    it('near the start', function()
-      feed('<C-R>r<C-B><C-O>')
-      screen:expect([[
-        {121:  1 }                                                                  |
-        {121:  2 }                                                                  |
-        {121:  3 }                                                                  |
-        {121:  4 }                                                                  |
-        {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
-        {121:  6 }:µ^µµµµµµµ                                                         |
-        {5:-- TERMINAL --}                                                        |
-      ]])
-      eq({ 6, 3 }, eval('nvim_win_get_cursor(0)'))
-      feed([[<C-\><C-N>]])
-      screen:expect([[
-        {121:  1 }                                                                  |
-        {121:  2 }                                                                  |
-        {121:  3 }                                                                  |
-        {121:  4 }                                                                  |
-        {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
-        {121:  6 }:^µµµµµµµµ                                                         |
-                                                                              |
-      ]])
-      eq({ 6, 1 }, eval('nvim_win_get_cursor(0)'))
+      eq({ 6, 12 }, eval('nvim_win_get_cursor(0)'))
     end)
   end)
-
-  describe('in a line with single-cell composed multibyte chars and no trailing spaces,', function()
-    before_each(function()
-      setup_ex_register('µ̳µ̳µ̳µ̳µ̳µ̳µ̳µ̳')
-    end)
-
-    it('at the end', function()
-      feed('<C-R>r')
-      screen:expect([[
-        {121:  1 }                                                                  |
-        {121:  2 }                                                                  |
-        {121:  3 }                                                                  |
-        {121:  4 }                                                                  |
-        {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
-        {121:  6 }:µ̳µ̳µ̳µ̳µ̳µ̳µ̳µ̳^                                                         |
-        {5:-- TERMINAL --}                                                        |
-      ]])
-      eq({ 6, 33 }, eval('nvim_win_get_cursor(0)'))
-      feed([[<C-\><C-N>]])
-      screen:expect([[
-        {121:  1 }                                                                  |
-        {121:  2 }                                                                  |
-        {121:  3 }                                                                  |
-        {121:  4 }                                                                  |
-        {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
-        {121:  6 }:µ̳µ̳µ̳µ̳µ̳µ̳µ̳^µ̳                                                         |
-                                                                              |
-      ]])
-      eq({ 6, 29 }, eval('nvim_win_get_cursor(0)'))
-    end)
-
-    it('near the end', function()
-      skip(is_os('win'))
-      feed('<C-R>r<C-X><C-X>')
-      screen:expect([[
-        {121:  1 }                                                                  |
-        {121:  2 }                                                                  |
-        {121:  3 }                                                                  |
-        {121:  4 }                                                                  |
-        {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
-        {121:  6 }:µ̳µ̳µ̳µ̳µ̳µ̳^µ̳µ̳                                                         |
-        {5:-- TERMINAL --}                                                        |
-      ]])
-      eq({ 6, 25 }, eval('nvim_win_get_cursor(0)'))
-      feed([[<C-\><C-N>]])
-      screen:expect([[
-        {121:  1 }                                                                  |
-        {121:  2 }                                                                  |
-        {121:  3 }                                                                  |
-        {121:  4 }                                                                  |
-        {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
-        {121:  6 }:µ̳µ̳µ̳µ̳µ̳^µ̳µ̳µ̳                                                         |
-                                                                              |
-      ]])
-      eq({ 6, 21 }, eval('nvim_win_get_cursor(0)'))
-    end)
-
-    it('near the start', function()
-      skip(is_os('win'))
-      feed('<C-R>r<C-B><C-O>')
-      screen:expect([[
-        {121:  1 }                                                                  |
-        {121:  2 }                                                                  |
-        {121:  3 }                                                                  |
-        {121:  4 }                                                                  |
-        {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
-        {121:  6 }:µ̳^µ̳µ̳µ̳µ̳µ̳µ̳µ̳                                                         |
-        {5:-- TERMINAL --}                                                        |
-      ]])
-      eq({ 6, 5 }, eval('nvim_win_get_cursor(0)'))
-      feed([[<C-\><C-N>]])
-      screen:expect([[
-        {121:  1 }                                                                  |
-        {121:  2 }                                                                  |
-        {121:  3 }                                                                  |
-        {121:  4 }                                                                  |
-        {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
-        {121:  6 }:^µ̳µ̳µ̳µ̳µ̳µ̳µ̳µ̳                                                         |
-                                                                              |
-      ]])
-      eq({ 6, 1 }, eval('nvim_win_get_cursor(0)'))
-    end)
-  end)
-
-  describe('in a line with double-cell multibyte chars and no trailing spaces,', function()
-    before_each(function()
-      setup_ex_register('哦哦哦哦哦哦哦哦')
-    end)
-
-    it('at the end', function()
-      feed('<C-R>r')
-      screen:expect([[
-        {121:  1 }                                                                  |
-        {121:  2 }                                                                  |
-        {121:  3 }                                                                  |
-        {121:  4 }                                                                  |
-        {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
-        {121:  6 }:哦哦哦哦哦哦哦哦^                                                 |
-        {5:-- TERMINAL --}                                                        |
-      ]])
-      eq({ 6, 25 }, eval('nvim_win_get_cursor(0)'))
-      feed([[<C-\><C-N>]])
-      screen:expect([[
-        {121:  1 }                                                                  |
-        {121:  2 }                                                                  |
-        {121:  3 }                                                                  |
-        {121:  4 }                                                                  |
-        {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
-        {121:  6 }:哦哦哦哦哦哦哦^哦                                                 |
-                                                                              |
-      ]])
-      eq({ 6, 22 }, eval('nvim_win_get_cursor(0)'))
-    end)
-
-    it('near the end', function()
-      feed('<C-R>r<C-X><C-X>')
-      screen:expect([[
-        {121:  1 }                                                                  |
-        {121:  2 }                                                                  |
-        {121:  3 }                                                                  |
-        {121:  4 }                                                                  |
-        {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
-        {121:  6 }:哦哦哦哦哦哦^哦哦                                                 |
-        {5:-- TERMINAL --}                                                        |
-      ]])
-      eq({ 6, 19 }, eval('nvim_win_get_cursor(0)'))
-      feed([[<C-\><C-N>]])
-      screen:expect([[
-        {121:  1 }                                                                  |
-        {121:  2 }                                                                  |
-        {121:  3 }                                                                  |
-        {121:  4 }                                                                  |
-        {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
-        {121:  6 }:哦哦哦哦哦^哦哦哦                                                 |
-                                                                              |
-      ]])
-      eq({ 6, 16 }, eval('nvim_win_get_cursor(0)'))
-    end)
-
-    it('near the start', function()
-      feed('<C-R>r<C-B><C-O>')
-      screen:expect([[
-        {121:  1 }                                                                  |
-        {121:  2 }                                                                  |
-        {121:  3 }                                                                  |
-        {121:  4 }                                                                  |
-        {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
-        {121:  6 }:哦^哦哦哦哦哦哦哦                                                 |
-        {5:-- TERMINAL --}                                                        |
-      ]])
-      eq({ 6, 4 }, eval('nvim_win_get_cursor(0)'))
-      feed([[<C-\><C-N>]])
-      screen:expect([[
-        {121:  1 }                                                                  |
-        {121:  2 }                                                                  |
-        {121:  3 }                                                                  |
-        {121:  4 }                                                                  |
-        {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
-        {121:  6 }:^哦哦哦哦哦哦哦哦                                                 |
-                                                                              |
-      ]])
-      eq({ 6, 1 }, eval('nvim_win_get_cursor(0)'))
-    end)
-  end)
-
-  it('at the end of a line with trailing spaces #16234', function()
-    setup_ex_register('aaaaaaaa    ')
-    feed('<C-R>r')
-    screen:expect([[
-      {121:  1 }                                                                  |
-      {121:  2 }                                                                  |
-      {121:  3 }                                                                  |
-      {121:  4 }                                                                  |
-      {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
-      {121:  6 }:aaaaaaaa    ^                                                     |
-      {5:-- TERMINAL --}                                                        |
-    ]])
-    matches('^:aaaaaaaa    [ ]*$', eval('nvim_get_current_line()'))
-    eq({ 6, 13 }, eval('nvim_win_get_cursor(0)'))
-    feed([[<C-\><C-N>]])
-    screen:expect([[
-      {121:  1 }                                                                  |
-      {121:  2 }                                                                  |
-      {121:  3 }                                                                  |
-      {121:  4 }                                                                  |
-      {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
-      {121:  6 }:aaaaaaaa   ^                                                      |
-                                                                            |
-    ]])
-    eq({ 6, 12 }, eval('nvim_win_get_cursor(0)'))
-  end)
-end)
+end
