@@ -817,6 +817,7 @@ do
           -- DA1 response that should come after the OSC 11 response if the
           -- terminal supports it.
           if string.match(resp, '^\x1b%[%?.-c$') then
+            print("got DA1 response")
             did_bg_detection = true
             return not did_bg_response
           end
@@ -829,6 +830,7 @@ do
 
             if rr and gg and bb then
               did_bg_response = true
+              print("got bg response")
 
               local luminance = (0.299 * rr) + (0.587 * gg) + (0.114 * bb)
               local bg = luminance < 0.5 and 'dark' or 'light'
@@ -875,9 +877,11 @@ do
 
       -- Wait until detection of OSC 11 capabilities is complete to
       -- ensure background is automatically set before user config.
-      vim.wait(100, function()
+      if not vim.wait(100, function()
         return did_bg_detection
-      end, 1)
+      end, 1) then
+        print("never got DA1 response")
+      end
     end
 
     --- If the TUI (term_has_truecolor) was able to determine that the host
