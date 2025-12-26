@@ -878,7 +878,8 @@ do
       vim.wait(100, function()
         return did_bg_detection
       end, 1)
-      vim.wait(5, function() return false end, 1)
+
+      vim.cmd("redraw!")
     end
 
     --- If the TUI (term_has_truecolor) was able to determine that the host
