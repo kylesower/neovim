@@ -256,8 +256,8 @@ jobs:
   #     # TODO: support entire test suite
   #     - run: zig build functionaltest -- test/functional/api/buffer_spec.lua
   #
-  # windows:
-  #   uses: ./.github/workflows/test_windows.yml
+  windows:
+    uses: ./.github/workflows/test_windows.yml
   #
   # with-external-deps:
   #   runs-on: ubuntu-24.04-arm

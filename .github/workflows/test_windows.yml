@@ -13,6 +13,9 @@ jobs:
   windows:
     runs-on: windows-2022
     timeout-minutes: 45
+    env:
+      TEST_FILE: test/functional/terminal/cursor_spec.lua
+      TEST_FILTER: "buffer cursor position is correct in terminal with number column"
     strategy:
       fail-fast: false
       matrix:
@@ -56,18 +59,18 @@ jobs:
         timeout-minutes: ${{ inputs.functionaltest_timeout }}
         run: cmake --build build --target functionaltest
 
-      - if: ${{ matrix.test == 'old' }}
-        uses: msys2/setup-msys2@v2
-        with:
-          update: true
-          install: unzip
-          pacboy: >-
-            make:p gcc:p diffutils:p
-          release: false
-
-      - if: ${{ matrix.test == 'old' }}
-        name: oldtest
-        shell: msys2 {0}
-        run: |
-          cd test/old/testdir
-          mingw32-make VERBOSE=1
+      # - if: ${{ matrix.test == 'old' }}
+      #   uses: msys2/setup-msys2@v2
+      #   with:
+      #     update: true
+      #     install: unzip
+      #     pacboy: >-
+      #       make:p gcc:p diffutils:p
+      #     release: false
+      #
+      # - if: ${{ matrix.test == 'old' }}
+      #   name: oldtest
+      #   shell: msys2 {0}
+      #   run: |
+      #     cd test/old/testdir
+      #     mingw32-make VERBOSE=1

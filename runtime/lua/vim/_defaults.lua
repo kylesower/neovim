@@ -819,7 +819,7 @@ do
             da1_count = da1_count + 1
             -- Don't delete the autocmd because the bg response may come
             -- after the DA1 response if the terminal handles requests out
-            -- of sequence. This can occur, for instance, in a nested Nvim 
+            -- of sequence. This can occur, for instance, in a nested Nvim
             -- instance since the bg request is handled by the TermRequest
             -- autocmd. When this happens, the bg may be set later in the
             -- startup sequence.
