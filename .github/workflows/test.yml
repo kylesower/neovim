@@ -26,20 +26,20 @@ env:
   # TEST_FILE: test/functional/core/startup_spec.lua
   # TEST_FILTER: foo
 
-# jobs:
-  # lint:
-  #   runs-on: ubuntu-24.04-arm
-  #   timeout-minutes: 10
-  #   env:
-  #     CC: clang
-  #   steps:
-  #     - uses: actions/checkout@v6
-  #     - uses: ./.github/actions/setup
-  #
-  #     - name: Install stylua
-  #       run: |
-  #         wget --directory-prefix="$BIN_DIR" https://github.com/JohnnyMorganz/StyLua/releases/latest/download/stylua-linux-aarch64.zip
-  #         (cd "$BIN_DIR"; unzip stylua*.zip)
+jobs:
+  lint:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
+    env:
+      CC: clang
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup
+
+      - name: Install stylua
+        run: |
+          wget --directory-prefix="$BIN_DIR" https://github.com/JohnnyMorganz/StyLua/releases/latest/download/stylua-linux-aarch64.zip
+          (cd "$BIN_DIR"; unzip stylua*.zip)
   #
   #     - name: Build third-party deps
   #       run: |
