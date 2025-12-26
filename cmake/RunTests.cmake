@@ -15,6 +15,8 @@ unset(ENV{TMUX})  # Nvim TUI shouldn't think it's running in tmux. #34173
 # re-set the environment variable. Investigate if we can avoid manually setting
 # it like with the GITHUB_CI environment variable.
 set(ENV{CIRRUS_CI} ${CIRRUS_CI})
+set(ENV{TEST_FILTER} ${TEST_FILTER})
+set(ENV{TEST_FILE} ${TEST_FILE})
 
 if(NOT DEFINED ENV{NVIM_LOG_FILE})
   set(ENV{NVIM_LOG_FILE} ${BUILD_DIR}/.nvimlog)

@@ -142,7 +142,7 @@ test/old/testdir/%.vim: phony_force nvim
 	$(SINGLE_MAKE) -C test/old/testdir NVIM_PRG=$(NVIM_PRG) SCRIPTS= $(MAKEOVERRIDES) $(patsubst test/old/testdir/%.vim,%,$@)
 
 functionaltest-lua: | nvim
-	$(CMAKE) --build build --target functionaltest --filter "is properly set in a nested Nvim instance"
+	$(CMAKE) --build build --target functionaltest
 
 FORMAT=formatc formatlua format
 LINT=lintlua lintsh lintc clang-analyzer lintcommit lintdoc lintdocurls lint luals
