@@ -875,11 +875,11 @@ do
 
       -- Wait until detection of OSC 11 capabilities is complete to
       -- ensure background is automatically set before user config.
-      vim.wait(100, function()
-        return did_bg_detection
-      end, 1)
-
-      vim.cmd("redraw!")
+      if vim.fn.mode(1) ~= 'cv' then
+        vim.wait(100, function()
+          return did_bg_detection
+        end, 1)
+      end
     end
 
     --- If the TUI (term_has_truecolor) was able to determine that the host
