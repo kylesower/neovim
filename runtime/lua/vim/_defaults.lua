@@ -817,7 +817,6 @@ do
           -- DA1 response that should come after the OSC 11 response if the
           -- terminal supports it.
           if string.match(resp, '^\x1b%[%?.-c$') then
-            print("got DA1 response")
             did_bg_detection = true
             return not did_bg_response
           end
@@ -830,25 +829,24 @@ do
 
             if rr and gg and bb then
               did_bg_response = true
-              print("got bg response")
 
               local luminance = (0.299 * rr) + (0.587 * gg) + (0.114 * bb)
               local bg = luminance < 0.5 and 'dark' or 'light'
               vim.api.nvim_set_option_value('background', bg, {})
 
               -- Ensure OptionSet still triggers when we set the background during startup
-              -- if vim.v.vim_did_enter == 0 then
-              --   vim.api.nvim_create_autocmd('VimEnter', {
-              --     group = group,
-              --     once = true,
-              --     nested = true,
-              --     callback = function()
-              --       vim.api.nvim_exec_autocmds('OptionSet', {
-              --         pattern = 'background',
-              --       })
-              --     end,
-              --   })
-              -- end
+              if vim.v.vim_did_enter == 0 then
+                vim.api.nvim_create_autocmd('VimEnter', {
+                  group = group,
+                  once = true,
+                  nested = true,
+                  callback = function()
+                    vim.api.nvim_exec_autocmds('OptionSet', {
+                      pattern = 'background',
+                    })
+                  end,
+                })
+              end
             end
           end
         end,
@@ -873,8 +871,12 @@ do
 
       -- Send OSC 11 query along with DA1 request to determine whether terminal
       -- supports the query. #32109
-      -- vim.api.nvim_ui_send('\027]11;?\007\027[c')
-      vim.api.nvim_set_option_value('background', "light", {})
+      vim.api.nvim_ui_send('\027]11;?\007\027[c')
+
+      for _ = 1, 100 do
+        if did_bg_detection then break end
+        vim.uv.sleep(1)
+      end
 
       -- Wait until detection of OSC 11 capabilities is complete to
       -- ensure background is automatically set before user config.
