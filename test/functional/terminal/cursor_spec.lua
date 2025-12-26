@@ -845,13 +845,19 @@ describe('buffer cursor position is correct in terminal with number column', fun
     }, {
       cols = 70,
     })
+    screen:expect([[
+                                                                            |*4
+      Entering Ex mode.  Type "visual" to go to Normal mode.                |
+      :^                                                                     |
+      {5:-- TERMINAL --}                                                        |
+    ]])
     command("set number")
     screen:expect([[
       {121:  1 }                                                                  |
       {121:  2 }                                                                  |
       {121:  3 }                                                                  |
       {121:  4 }                                                                  |
-      {121:  5 }                                                                  |
+      {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
       {121:  6 }:^                                                                 |
       {5:-- TERMINAL --}                                                        |
     ]])
