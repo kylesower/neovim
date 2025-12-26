@@ -3810,7 +3810,7 @@ describe('TUI bg color', function()
       '--cmd',
       'set noswapfile',
     })
-    screen:expect({any = "dark"})
+    screen:expect({ any = '%[No Name%]' })
     local child_session = n.connect(child_server)
     retry(nil, nil, function()
       eq({ true, 'dark' }, { child_session:request('nvim_eval', '&background') })
@@ -3830,7 +3830,8 @@ describe('TUI bg color', function()
       '--cmd',
       'set noswapfile',
     })
-    screen:expect({any = "light"})
+    screen:expect({ any = '%[No Name%]' })
+    n.poke_eventloop()
     local child_session = n.connect(child_server)
     retry(nil, nil, function()
       eq({ true, 'light' }, { child_session:request('nvim_get_option_value', 'background', {}) })
