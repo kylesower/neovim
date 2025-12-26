@@ -3833,7 +3833,7 @@ describe('TUI bg color', function()
     screen:expect({ any = '%[No Name%]' })
     local child_session = n.connect(child_server)
     retry(nil, nil, function()
-      eq({ true, 'light' }, { child_session:request('nvim_eval', '&background') })
+      eq({ true, 'light' }, { child_session:request('nvim_get_option_value', 'background', {}) })
     end)
   end)
 
