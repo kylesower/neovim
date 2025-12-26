@@ -873,18 +873,13 @@ do
       -- supports the query. #32109
       vim.api.nvim_ui_send('\027]11;?\007\027[c')
 
-      for _ = 1, 100 do
-        if did_bg_detection then break end
-        vim.uv.sleep(1)
-      end
-
       -- Wait until detection of OSC 11 capabilities is complete to
       -- ensure background is automatically set before user config.
-      -- if not vim.wait(100, function()
-      --   return did_bg_detection
-      -- end, 1) then
-      --   print("never got DA1 response")
-      -- end
+      vim.wait(100, function()
+        return did_bg_detection
+      end, 1)
+      vim.wait(5, function() return false end, 1)
+      end
     end
 
     --- If the TUI (term_has_truecolor) was able to determine that the host
