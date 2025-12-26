@@ -23,7 +23,7 @@ freebsd_task:
     - pw useradd cirrus -m
     - chown -R cirrus:cirrus .
   functionaltest_script:
-    - sudo -u cirrus gmake functionaltest
+    - sudo -u cirrus TEST_FILTER="$TEST_FILTER" TEST_FILE="$TEST_FILE" gmake functionaltest
   # unittest_script:
   #   - sudo -u cirrus gmake unittest
   # oldtest_script:
