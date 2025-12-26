@@ -857,7 +857,7 @@ describe('buffer cursor position is correct in terminal with number column', fun
       {121:  2 }                                                                  |
       {121:  3 }                                                                  |
       {121:  4 }                                                                  |
-      {121:  5 }Entering Ex mode.  Type "visual" to go to Normal mode.            |
+      {121:  5 }                                                                  |
       {121:  6 }:^                                                                 |
       {5:-- TERMINAL --}                                                        |
     ]])
