@@ -805,7 +805,7 @@ do
       -- an OSC 11 response from the terminal emulator. If the user has set
       -- 'background' explicitly then we will delete this autocommand,
       -- effectively disabling automatic background setting.
-      local did_bg_detection = false
+      local da1_count = 0
       local id = vim.api.nvim_create_autocmd('TermResponse', {
         group = group,
         nested = true,
@@ -816,13 +816,11 @@ do
           -- DA1 response that should come after the OSC 11 response if the
           -- terminal supports it.
           if string.match(resp, '^\x1b%[%?.-c$') then
-            did_bg_detection = true
+            da1_count = da1_count + 1
             -- Don't delete the autocmd because the bg response may come
             -- after the DA1 response if the terminal handles requests out
-            -- of sequence. This can occur, for instance, in a nested Nvim
-            -- instance since the bg request is handled by the TermRequest
-            -- autocmd. When this happens, the bg may be set later in the
-            -- startup sequence.
+            -- of sequence. In that case, the background will simply be set
+            -- later in the startup sequence.
             return false
           end
 
@@ -872,14 +870,20 @@ do
         end,
       })
 
-      -- Send OSC 11 query along with DA1 request to determine whether terminal
-      -- supports the query. #32109
-      vim.api.nvim_ui_send('\027]11;?\007\027[c')
+      -- HACK:
+      -- Send OSC 11 query along with two DA1 requests to determine whether
+      -- terminal supports the query. We use two requests because the function
+      -- tui_query_kitty_keyboard sends a DA1 request as well. If we only
+      -- wait for a single DA1 response, it may or may not have come from
+      -- tui_query_kitty_keyboard. #32109
+      local osc11 = '\027]11;?\007'
+      local da1 = '\027[c'
+      vim.api.nvim_ui_send(osc11 .. da1 .. da1)
 
       -- Wait until detection of OSC 11 capabilities is complete to
       -- ensure background is automatically set before user config.
       vim.wait(100, function()
-        return did_bg_detection
+        return da1_count >= 2
       end, 1)
     end
 
