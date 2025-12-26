@@ -20,7 +20,7 @@ freebsd_task:
     - pw useradd cirrus -m
     - chown -R cirrus:cirrus .
   functionaltest_script:
-    - TEST_FILE="test/functional/terminal/tui_spec.lua" TEST_FILTER="is properly set in a nested Nvim instance" sudo -u cirrus gmake functionaltest
+    - sudo -u cirrus gmake functionaltest
   # unittest_script:
   #   - sudo -u cirrus gmake unittest
   # oldtest_script:
