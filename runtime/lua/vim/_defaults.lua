@@ -818,7 +818,13 @@ do
           -- terminal supports it.
           if string.match(resp, '^\x1b%[%?.-c$') then
             did_bg_detection = true
-            return not did_bg_response
+            -- Don't delete the autocmd because the bg response may come
+            -- after the DA1 response if the terminal handles requests out
+            -- of sequence. This can occur, for instance, in a nested Nvim 
+            -- instance since the bg request is handled by the TermRequest
+            -- autocmd. When this happens, the bg may be set later in the
+            -- startup sequence.
+            return false
           end
 
           local r, g, b = parseosc11(resp)
