@@ -844,6 +844,7 @@ describe('buffer cursor position is correct in terminal with number column', fun
     }, {
       cols = 70,
     })
+    vim.uv.sleep(1)
     feed('gQ')
     screen:expect([[
       {121:  1 }                                                                  |
