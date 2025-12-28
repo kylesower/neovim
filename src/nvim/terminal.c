@@ -322,12 +322,7 @@ static int on_osc(int command, VTermStringFragment frag, void *user)
 {
   Terminal *term = user;
 
-  if (frag.str == NULL || frag.len == 0) {
-    if (has_event(EVENT_TERMREQUEST) && frag.final) {
-      kv_size(term->termrequest_buffer) = 0;
-      kv_printf(term->termrequest_buffer, "\x1b]%d;n", command);
-      schedule_termrequest(term);
-    }
+  if (frag.str == NULL) {
     return 0;
   }
 
@@ -339,7 +334,11 @@ static int on_osc(int command, VTermStringFragment frag, void *user)
     kv_size(term->termrequest_buffer) = 0;
     kv_printf(term->termrequest_buffer, "\x1b]%d;", command);
   }
-  kv_concat_len(term->termrequest_buffer, frag.str, frag.len);
+
+  if (frag.len != 0) {
+    kv_concat_len(term->termrequest_buffer, frag.str, frag.len);
+  }
+
   if (frag.final) {
     if (has_event(EVENT_TERMREQUEST)) {
       schedule_termrequest(term);
