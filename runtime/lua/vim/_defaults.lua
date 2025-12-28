@@ -569,11 +569,29 @@ do
         local command = fg_request and 10 or 11
         local data = string.format('\027]%d;rgb:%04x/%04x/%04x\007', command, red, green, blue)
         vim.api.nvim_chan_send(channel, data)
-      else
-        vim.api.nvim_ui_send(args.data.sequence .. "\x1b\\")
       end
     end,
   })
+
+  ---@param code integer
+  ---@param desc string
+  local function forward_osc_code(code, desc)
+    vim.api.nvim_create_autocmd('TermRequest', {
+      group = nvim_terminal_augroup,
+      desc = desc,
+      callback = function(args)
+        local channel = vim.bo[args.buf].channel --- @type integer
+        local req = args.data.sequence ---@type string
+        if channel == 0 or not req:match(string.format('^\027]%d;', code)) then
+          return
+        end
+        vim.api.nvim_ui_send(req .. '\x1b\\')
+      end,
+    })
+  end
+
+  forward_osc_code(4, 'Handles OSC query/change palette color requests')
+  forward_osc_code(104, 'Handles OSC reset palette requests')
 
   local nvim_terminal_prompt_ns = vim.api.nvim_create_namespace('nvim.terminal.prompt')
   vim.api.nvim_create_autocmd('TermRequest', {
