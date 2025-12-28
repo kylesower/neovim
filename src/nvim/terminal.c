@@ -323,6 +323,11 @@ static int on_osc(int command, VTermStringFragment frag, void *user)
   Terminal *term = user;
 
   if (frag.str == NULL || frag.len == 0) {
+    if (has_event(EVENT_TERMREQUEST) && frag.final) {
+      kv_size(term->termrequest_buffer) = 0;
+      kv_printf(term->termrequest_buffer, "\x1b]%d;n", command);
+      schedule_termrequest(term);
+    }
     return 0;
   }
 

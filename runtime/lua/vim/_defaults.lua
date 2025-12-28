@@ -569,6 +569,8 @@ do
         local command = fg_request and 10 or 11
         local data = string.format('\027]%d;rgb:%04x/%04x/%04x\007', command, red, green, blue)
         vim.api.nvim_chan_send(channel, data)
+      else
+        vim.api.nvim_ui_send(args.data.sequence .. "\x1b\\")
       end
     end,
   })
