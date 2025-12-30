@@ -33,12 +33,14 @@ find_package(Libuv 1.28.0 REQUIRED)
 find_package(Lpeg REQUIRED)
 find_package(Treesitter 0.25.0 REQUIRED)
 find_package(UTF8proc REQUIRED)
+find_package(Ghostty REQUIRED)
 
 target_link_libraries(main_lib INTERFACE
   iconv
   lpeg
   treesitter
-  utf8proc)
+  utf8proc
+  ghostty)
 target_link_libraries(nlua0 PUBLIC lpeg)
 
 if(ENABLE_LIBINTL)
@@ -77,6 +79,20 @@ else()
   endif()
 endif()
 
+# install(DIRECTORY ${GHOSTTY_INCLUDE_DIR}/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} FILES_MATCHING PATTERN "*.h")
+# install(FILES ${GHOSTTY_LIBRARY} DESTINATION ${CMAKE_INSTALL_LIBDIR})
+get_filename_component(GHOSTTY_LIB_DIR ${GHOSTTY_LIBRARY} DIRECTORY)
+
+file(GLOB GHOSTTY_SO_FILES "${GHOSTTY_LIB_DIR}/libghostty-vt.so*")
+install(FILES ${GHOSTTY_SO_FILES}
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)
+set_target_properties(nvim_bin PROPERTIES INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
+
+# install(DIRECTORY ${GHOSTTY_LIB_DIR}/
+#     DESTINATION ${CMAKE_INSTALL_LIBDIR}
+#     FILES_MATCHING PATTERN "libghostty-vt.so*"
+# )
 #-------------------------------------------------------------------------------
 # Compiler and linker options
 #-------------------------------------------------------------------------------
