@@ -6,6 +6,8 @@
 
 #include "nvim/api/private/defs.h"  // IWYU pragma: keep
 #include "nvim/types_defs.h"  // IWYU pragma: keep
+#include "nvim/vterm/keyboard.h"
+#include "nvim/vterm/vterm_defs.h"
 
 typedef void (*terminal_read_pause_cb)(bool pause, void *data);
 typedef void (*terminal_write_cb)(const char *buffer, size_t size, void *data);

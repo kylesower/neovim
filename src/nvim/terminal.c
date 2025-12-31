@@ -71,6 +71,7 @@
 #include "nvim/highlight_defs.h"
 #include "nvim/highlight_group.h"
 #include "nvim/keycodes.h"
+#include "nvim/log.h"
 #include "nvim/macros_defs.h"
 #include "nvim/main.h"
 #include "nvim/map_defs.h"
@@ -145,6 +146,7 @@ typedef struct {
 struct terminal {
   TerminalOptions opts;  // options passed to terminal_alloc()
   VTerm *vt;
+  VTermZ *vtz;
   VTermScreen *vts;
   // buffer used to:
   //  - convert VTermScreen cell arrays into utf8 strings
@@ -212,20 +214,51 @@ struct terminal {
   size_t refcount;                  // reference count
 };
 
+// static VTermScreenCallbacks vterm_screen_callbacks = {
+//   .damage = term_damage,
+//   .moverect = term_moverect,
+//   .movecursor = term_movecursor,
+//   .settermprop = term_settermprop,
+//   .bell = term_bell,
+//   .theme = term_theme,
+//   .sb_pushline = term_sb_push,  // Called before a line goes offscreen.
+//   .sb_popline = term_sb_pop,
+// };
 static VTermScreenCallbacks vterm_screen_callbacks = {
-  .damage = term_damage,
-  .moverect = term_moverect,
-  .movecursor = term_movecursor,
-  .settermprop = term_settermprop,
-  .bell = term_bell,
-  .theme = term_theme,
-  .sb_pushline = term_sb_push,  // Called before a line goes offscreen.
-  .sb_popline = term_sb_pop,
-  .sb_clear = term_sb_clear,
+  // .damage = term_damage,
+  // .moverect = term_moverect,
+  .movecursor = NULL,
+  // .settermprop = term_settermprop,
+  // .bell = term_bell,
+  // .theme = term_theme,
+  // .sb_pushline = term_sb_push,  // Called before a line goes offscreen.
+  // .sb_popline = term_sb_pop,
+  // .sb_clear = term_sb_clear,
 };
 
+static VTermZCallbacks vtermz_screen_callbacks = {
+  .movecursor = term_movecursorz,
+  .damage = term_damagez,
+  // .settermprop = term_settermprop,
+  .bell = term_bell,
+  .theme_request = term_theme,
+  .osc_color = on_osc_color,
+  // .on_dcs = on_dcsz,
+  .on_apc = on_apcz,
+  .cursor_style = term_cursor_style,
+  .set_title = term_set_title,
+  .report_color_scheme = term_report_color_scheme,
+  .forward_mouse = term_forward_mouse,
+  .set_clipboard = on_clipboard_set,
+};
+
+// static VTermSelectionCallbacks vterm_selection_callbacks = {
+//   .set = term_selection_set,
+//   // For security reasons we don't support querying the system clipboard from the embedded terminal
+//   .query = NULL,
+// };
 static VTermSelectionCallbacks vterm_selection_callbacks = {
-  .set = term_selection_set,
+  .set = NULL,
   // For security reasons we don't support querying the system clipboard from the embedded terminal
   .query = NULL,
 };
@@ -380,6 +413,20 @@ static int on_osc(int command, VTermStringFragment frag, void *user)
   return 1;
 }
 
+static int on_osc_color(VTermZOscColor osc, void *user) {
+  Terminal *term = user;
+
+  if (has_event(EVENT_TERMREQUEST)) {
+    term->termrequest_terminator = (VTermTerminator)osc.terminator;
+    kv_size(term->termrequest_buffer) = 0;
+    kv_printf(term->termrequest_buffer, "\x1b]%d;", osc.command);
+    kv_concat_len(term->termrequest_buffer, osc.buf, osc.len);
+    schedule_termrequest(term);
+  }
+
+  return 1;
+}
+
 static int on_dcs(const char *command, size_t commandlen, VTermStringFragment frag, void *user)
 {
   Terminal *term = user;
@@ -401,6 +448,54 @@ static int on_dcs(const char *command, size_t commandlen, VTermStringFragment fr
     schedule_termrequest(term);
   }
   return 1;
+}
+
+static int on_apcz(const char *buf, size_t len, void *user) {
+  Terminal *term = user;
+
+  if (has_event(EVENT_TERMREQUEST)) {
+
+    kv_size(term->termrequest_buffer) = 0;
+    kv_printf(term->termrequest_buffer, "\x1b_");
+    kv_concat_len(term->termrequest_buffer, buf, len);
+    // Ghostty doesn't give us a convenient way to get the terminator for APC sequences.
+    // Just assume ST.
+    term->termrequest_terminator = VTERM_TERMINATOR_ST; // frag.terminator;
+    schedule_termrequest(term);
+  }
+
+  return 1;
+}
+
+// static int on_dcsz(VTermZDcs dcs, void *user) {
+//   Terminal *term = user;
+//
+//   if (has_event(EVENT_TERMREQUEST)) {
+//     term->termrequest_terminator = (VTermTerminator)osc.terminator;
+//     kv_size(term->termrequest_buffer) = 0;
+//     kv_printf(term->termrequest_buffer, "\x1b]%d;", osc.command);
+//     kv_concat_len(term->termrequest_buffer, osc.buf, osc.len);
+//     schedule_termrequest(term);
+//   }
+//
+//   return 1;
+// }
+//
+static int term_cursor_style(VTermZCursorStyle style, void *user) {
+  Terminal *term = user;
+  term->cursor.blink = style.blink;
+  term->cursor.shape = (int)style.shape;
+  term->cursor.visible = style.visible;
+  term->pending.cursor = true;
+
+  invalidate_terminal(term, -1, -1);
+  return 1;
+}
+
+static int term_set_title(const char *title, size_t len, void *user) {
+  Terminal *term = user;
+  buf_T *buf = handle_get_buffer(term->buf_handle);
+  buf_set_term_title(buf, title, len);
 }
 
 static int on_apc(VTermStringFragment frag, void *user)
@@ -429,12 +524,23 @@ static int on_apc(VTermStringFragment frag, void *user)
 static VTermStateFallbacks vterm_fallbacks = {
   .control = NULL,
   .csi = NULL,
-  .osc = on_osc,
+  // TODO: determine dynamically
+  // .osc = on_osc,
+  .osc = NULL,
   .dcs = on_dcs,
   .apc = on_apc,
   .pm = NULL,
   .sos = NULL,
 };
+// static VTermStateFallbacks vterm_fallbacks = {
+//   .control = NULL,
+//   .csi = NULL,
+//   .osc = NULL,
+//   .dcs = NULL,
+//   .apc = NULL,
+//   .pm = NULL,
+//   .sos = NULL,
+// };
 
 void terminal_init(void)
 {
@@ -449,6 +555,7 @@ void terminal_teardown(void)
   multiqueue_free(refresh_timer.events);
   time_watcher_close(&refresh_timer, NULL);
   set_destroy(ptr_t, &invalidated_terminals);
+  vtermz_teardown();
   // terminal_destroy might be called after terminal_teardown is invoked
   // make sure it is in an empty, valid state
   invalidated_terminals = (Set(ptr_t)) SET_INIT;
@@ -510,7 +617,9 @@ Terminal *terminal_alloc(buf_T *buf, TerminalOptions opts)
   buf->terminal = term;
   // Create VTerm
   term->vt = vterm_new(opts.height, opts.width);
+  term->vtz = vtermz_new(opts.height, opts.width);
   vterm_set_utf8(term->vt, 1);
+  vtermz_set_utf8(term->vtz, true);
   // Setup state
   VTermState *state = vterm_obtain_state(term->vt);
   // Set up screen
@@ -519,10 +628,13 @@ Terminal *terminal_alloc(buf_T *buf, TerminalOptions opts)
   vterm_screen_enable_reflow(term->vts, true);
   // delete empty lines at the end of the buffer
   vterm_screen_set_callbacks(term->vts, &vterm_screen_callbacks, term);
+  // TODO: set this at comptime based on vterm implementation
+  vtermz_screen_set_callbacks(term->vtz, &vtermz_screen_callbacks, term);
   vterm_screen_set_unrecognised_fallbacks(term->vts, &vterm_fallbacks, term);
   vterm_screen_set_damage_merge(term->vts, VTERM_DAMAGE_SCROLL);
   vterm_screen_reset(term->vts, 1);
   vterm_output_set_callback(term->vt, term_output_callback, term);
+  vtermz_output_set_callback(term->vtz, term_output_callback, term);
 
   term->selection_buffer = xcalloc(SELECTIONBUF_SIZE, 1);
   vterm_state_set_selection_callbacks(state, &vterm_selection_callbacks, term,
@@ -587,6 +699,7 @@ void terminal_open(Terminal **termpp, buf_T *buf)
   aco_save_T aco;
   aucmd_prepbuf(&aco, buf);
 
+  // TODO: check if I still need this if statement
   if (term->sb_buffer != NULL) {
     // If scrollback has been allocated by autocommands between terminal_alloc()
     // and terminal_open(), it also needs to be refreshed.
@@ -594,6 +707,8 @@ void terminal_open(Terminal **termpp, buf_T *buf)
   } else {
     assert(term->invalid_start >= 0);
   }
+
+  vtermz_refresh(term->vtz);
   refresh_screen(term, buf);
   buf->b_locked++;
   set_option_value(kOptBuftype, STATIC_CSTR_AS_OPTVAL("terminal"), OPT_LOCAL);
@@ -629,7 +744,7 @@ void terminal_open(Terminal **termpp, buf_T *buf)
   // - b:terminal_color_{NUM}
   // - g:terminal_color_{NUM}
   // - the VTerm instance
-  for (int i = 0; i < 16; i++) {
+  for (uint8_t i = 0; i < 16; i++) {
     char var[64];
     snprintf(var, sizeof(var), "terminal_color_%d", i);
     char *name = get_config_string(buf, var);
@@ -644,6 +759,7 @@ void terminal_open(Terminal **termpp, buf_T *buf)
                         (uint8_t)((color_val >> 8) & 0xFF),
                         (uint8_t)((color_val >> 0) & 0xFF));
         vterm_state_set_palette_color(state, i, &color);
+        vtermz_state_set_palette_color(term->vtz, i, &color);
         term->color_set[i] = true;
       }
     }
@@ -772,8 +888,9 @@ void terminal_check_size(Terminal *term)
     return;
   }
 
-  int curwidth, curheight;
-  vterm_get_size(term->vt, &curheight, &curwidth);
+  uint16_t curwidth, curheight;
+  // vterm_get_size(term->vt, &curheight, &curwidth);
+  vtermz_get_size(term->vtz, &curheight, &curwidth);
   uint16_t width = 0;
   uint16_t height = 0;
 
@@ -798,7 +915,9 @@ void terminal_check_size(Terminal *term)
   }
 
   vterm_set_size(term->vt, height, width);
+  vtermz_set_size(term->vtz, height, width);
   vterm_screen_flush_damage(term->vts);
+  vtermz_flush_damage(term->vtz);
   term->pending.resize = true;
   invalidate_terminal(term, -1, -1);
 }
@@ -990,6 +1109,8 @@ bool terminal_enter(void)
 static void terminal_check_cursor(void)
 {
   Terminal *term = curbuf->terminal;
+  // TODO: I think this works by chance because we set cursor to an absolute value, but
+  // should remove row_to_linenr.
   curwin->w_cursor.lnum = MIN(curbuf->b_ml.ml_line_count,
                               row_to_linenr(term, term->cursor.row));
   const linenr_T topline = MAX(curbuf->b_ml.ml_line_count - curwin->w_view_height + 1, 1);
@@ -1231,6 +1352,7 @@ void terminal_destroy(Terminal **termpp)
     kv_destroy(term->selection);
     kv_destroy(term->termrequest_buffer);
     vterm_free(term->vt);
+    vtermz_free(term->vtz);
     xfree(term->pending.send);
     multiqueue_free(term->pending.events);
     xfree(term);
@@ -1287,7 +1409,9 @@ void terminal_paste(int count, String *y_array, size_t y_size)
   if (y_size == 0) {
     return;
   }
-  vterm_keyboard_start_paste(curbuf->terminal->vt);
+  // TODO: ifdef
+  // vterm_keyboard_start_paste(curbuf->terminal->vt);
+  vtermz_start_paste(curbuf->terminal->vtz);
   size_t buff_len = y_array[0].size;
   char *buff = xmalloc(buff_len);
   for (int i = 0; i < count; i++) {
@@ -1321,7 +1445,8 @@ void terminal_paste(int count, String *y_array, size_t y_size)
     }
   }
   xfree(buff);
-  vterm_keyboard_end_paste(curbuf->terminal->vt);
+  // vterm_keyboard_end_paste(curbuf->terminal->vt);
+  vtermz_end_paste(curbuf->terminal->vtz);
 }
 
 static void terminal_send_key(Terminal *term, int c)
@@ -1336,9 +1461,12 @@ static void terminal_send_key(Terminal *term, int c)
   VTermKey key = convert_key(&c, &mod);
 
   if (key != VTERM_KEY_NONE) {
-    vterm_keyboard_key(term->vt, key, mod);
+    // TODO: choose between vterm or vtermz at comptime
+    // vterm_keyboard_key(term->vt, key, mod);
+    vtermz_keyboard_key(term->vtz, key, mod);
   } else if (!IS_SPECIAL(c)) {
-    vterm_keyboard_unichar(term->vt, (uint32_t)c, mod);
+    // vterm_keyboard_unichar(term->vt, (uint32_t)c, mod);
+    vtermz_keyboard_unichar(term->vtz, (uint32_t)c, mod);
   }
 }
 
@@ -1375,13 +1503,18 @@ void terminal_receive(Terminal *term, const char *data, size_t len)
       kv_push(crlf_data, data[i]);
     }
 
-    vterm_input_write(term->vt, crlf_data.items, kv_size(crlf_data));
+    // TODO: ifdef VTERM_GHOSTTY
+    // vterm_input_write(term->vt, crlf_data.items, kv_size(crlf_data));
+    vtermz_input_write(term->vtz, crlf_data.items, kv_size(crlf_data));
     kv_destroy(crlf_data);
   } else {
-    vterm_input_write(term->vt, data, len);
+    // vterm_input_write(term->vt, data, len);
+    vtermz_input_write(term->vtz, data, len);
   }
   vterm_screen_flush_damage(term->vts);
+  vtermz_flush_damage(term->vtz);
 
+  // TODO: fix for new term
   // When a synchronized update just ended, refresh the buffer immediately
   // instead of waiting for the 10ms timer.  This eliminates the window where
   // neovim's UI could repaint showing stale buffer content.
@@ -1421,48 +1554,147 @@ static int get_underline_hl_flag(VTermScreenCellAttrs attrs)
   }
 }
 
+static int get_underline_hl_flagz(uint8_t underline)
+{
+  switch (underline) {
+  case VTERMZ_UNDERLINE_NONE:
+    return 0;
+  case VTERMZ_UNDERLINE_SINGLE:
+    return HL_UNDERLINE;
+  case VTERMZ_UNDERLINE_DOUBLE:
+    return HL_UNDERDOUBLE;
+  case VTERMZ_UNDERLINE_CURLY:
+    return HL_UNDERCURL;
+  case VTERMZ_UNDERLINE_DOTTED:
+    return HL_UNDERDOTTED;
+  case VTERMZ_UNDERLINE_DASHED:
+    return HL_UNDERDASHED;
+  default:
+    return 0;
+  }
+}
+
+// void terminal_get_line_attributes(Terminal *term, win_T *wp, int linenr, int *term_attrs)
+// {
+//   uint16_t height, width;
+//   // vterm_get_size(term->vt, &height, &width);
+//   vtermz_get_size(term->vtz, &height, &width);
+//   VTermState *state = vterm_obtain_state(term->vt);
+//   assert(linenr);
+//   int row = linenr_to_row(term, linenr);
+//   if (row >= height) {
+//     // Terminal height was decreased but the change wasn't reflected into the
+//     // buffer yet
+//     return;
+//   }
+//
+//   width = MIN(TERM_ATTRS_MAX, width);
+//   for (int col = 0; col < width; col++) {
+//     VTermScreenCell cell = {0};
+//     bool color_valid = fetch_cell(term, row, col, &cell);
+//     bool fg_default = !color_valid || VTERM_COLOR_IS_DEFAULT_FG(&cell.fg);
+//     bool bg_default = !color_valid || VTERM_COLOR_IS_DEFAULT_BG(&cell.bg);
+//
+//     // Get the rgb value set by libvterm.
+//     int vt_fg = fg_default ? -1 : get_rgb(state, cell.fg);
+//     int vt_bg = bg_default ? -1 : get_rgb(state, cell.bg);
+//
+//     bool fg_indexed = VTERM_COLOR_IS_INDEXED(&cell.fg);
+//     bool bg_indexed = VTERM_COLOR_IS_INDEXED(&cell.bg);
+//
+//     int16_t vt_fg_idx = ((!fg_default && fg_indexed) ? cell.fg.indexed.idx + 1 : 0);
+//     int16_t vt_bg_idx = ((!bg_default && bg_indexed) ? cell.bg.indexed.idx + 1 : 0);
+//
+//     bool fg_set = vt_fg_idx && vt_fg_idx <= 16 && term->color_set[vt_fg_idx - 1];
+//     bool bg_set = vt_bg_idx && vt_bg_idx <= 16 && term->color_set[vt_bg_idx - 1];
+//
+//     int hl_attrs = (cell.attrs.bold ? HL_BOLD : 0)
+//                    | (cell.attrs.italic ? HL_ITALIC : 0)
+//                    | (cell.attrs.reverse ? HL_INVERSE : 0)
+//                    | get_underline_hl_flag(cell.attrs)
+//                    | (cell.attrs.strike ? HL_STRIKETHROUGH : 0)
+//                    | ((fg_indexed && !fg_set) ? HL_FG_INDEXED : 0)
+//                    | ((bg_indexed && !bg_set) ? HL_BG_INDEXED : 0);
+//
+//     int attr_id = 0;
+//
+//     if (hl_attrs || !fg_default || !bg_default) {
+//       attr_id = hl_get_term_attr(&(HlAttrs) {
+//         .cterm_ae_attr = (int16_t)hl_attrs,
+//         .cterm_fg_color = vt_fg_idx,
+//         .cterm_bg_color = vt_bg_idx,
+//         .rgb_ae_attr = (int16_t)hl_attrs,
+//         .rgb_fg_color = vt_fg,
+//         .rgb_bg_color = vt_bg,
+//         .rgb_sp_color = -1,
+//         .hl_blend = -1,
+//         .url = -1,
+//       });
+//     }
+//
+//     if (cell.uri > 0) {
+//       attr_id = hl_combine_attr(attr_id, cell.uri);
+//     }
+//
+//     term_attrs[col] = attr_id;
+//   }
+// }
+
 void terminal_get_line_attributes(Terminal *term, win_T *wp, int linenr, int *term_attrs)
 {
-  int height, width;
-  vterm_get_size(term->vt, &height, &width);
-  VTermState *state = vterm_obtain_state(term->vt);
+  // Have to do a refresh here because this is called externally, so we can't
+  // be sure the render state is up to date.
+  vtermz_refresh(term->vtz);
+
+  uint16_t height, width;
+  vtermz_get_size(term->vtz, &height, &width);
   assert(linenr);
-  int row = linenr_to_row(term, linenr);
-  if (row >= height) {
-    // Terminal height was decreased but the change wasn't reflected into the
-    // buffer yet
-    return;
-  }
 
   width = MIN(TERM_ATTRS_MAX, width);
-  for (int col = 0; col < width; col++) {
-    VTermScreenCell cell;
-    bool color_valid = fetch_cell(term, row, col, &cell);
-    bool fg_default = !color_valid || VTERM_COLOR_IS_DEFAULT_FG(&cell.fg);
-    bool bg_default = !color_valid || VTERM_COLOR_IS_DEFAULT_BG(&cell.bg);
+  VTermZStyle styles[TERM_ATTRS_MAX];
+  size_t num_cols = vtermz_fill_buf_lnum_style(term->vtz, (size_t)linenr - 1, 0, width, styles, TERM_ATTRS_MAX);
+  uint16_t last_uri_id = 0;
+  int uri_attr_id = 0;
+  for (size_t col = 0; col < num_cols; col++) {
+    VTermZStyle style = styles[col];
+    // VTermScreenCellZ cell = {0};
+    // bool color_valid = fetch_cell(term, row, col, &cell);
+    // bool fg_default = !color_valid || VTERM_COLOR_IS_DEFAULT_FG(&cell.fg);
+    // bool bg_default = !color_valid || VTERM_COLOR_IS_DEFAULT_BG(&cell.bg);
+    bool fg_default = VTERMZ_COLOR_IS_DEFAULT(&style.fg);
+    bool bg_default = VTERMZ_COLOR_IS_DEFAULT(&style.bg);
 
     // Get the rgb value set by libvterm.
-    int vt_fg = fg_default ? -1 : get_rgb(state, cell.fg);
-    int vt_bg = bg_default ? -1 : get_rgb(state, cell.bg);
+    // int vt_fg = fg_default ? -1 : get_rgb(state, cell.fg);
+    // int vt_bg = bg_default ? -1 : get_rgb(state, cell.bg);
+    int vt_fg = vtermz_color_rgb_int(term->vtz, style.fg);
+    int vt_bg = vtermz_color_rgb_int(term->vtz, style.bg);
 
-    bool fg_indexed = VTERM_COLOR_IS_INDEXED(&cell.fg);
-    bool bg_indexed = VTERM_COLOR_IS_INDEXED(&cell.bg);
+    bool fg_indexed = VTERMZ_COLOR_IS_PALETTE(style.fg);
+    bool bg_indexed = VTERMZ_COLOR_IS_PALETTE(style.bg);
 
-    int16_t vt_fg_idx = ((!fg_default && fg_indexed) ? cell.fg.indexed.idx + 1 : 0);
-    int16_t vt_bg_idx = ((!bg_default && bg_indexed) ? cell.bg.indexed.idx + 1 : 0);
+    int16_t vt_fg_idx = fg_indexed ? style.fg.palette.idx + 1 : 0;
+    int16_t vt_bg_idx = bg_indexed ? style.bg.palette.idx + 1 : 0;
 
     bool fg_set = vt_fg_idx && vt_fg_idx <= 16 && term->color_set[vt_fg_idx - 1];
     bool bg_set = vt_bg_idx && vt_bg_idx <= 16 && term->color_set[vt_bg_idx - 1];
+    //   WLOG("buf[%d, %d] fg_default: %d, bg_default: %d, fg_indexed: %d, bg_indexed: %d, vt_fg: %d, vt_bg: %d, vt_fg_idx: %d, vt_bg_idx: %d, vt_fg_set: %d, vt_bg_set: %d, fg_type: %d, fg_idx: %d", row, col, fg_default, bg_default, fg_indexed, bg_indexed, vt_fg, vt_bg, vt_fg_idx, vt_bg_idx, (int)fg_set, (int)bg_set, style.fg.type, style.fg.palette.idx);
 
-    int hl_attrs = (cell.attrs.bold ? HL_BOLD : 0)
-                   | (cell.attrs.dim ? HL_DIM : 0)
-                   | (cell.attrs.blink ? HL_BLINK : 0)
-                   | (cell.attrs.conceal ? HL_CONCEALED : 0)
-                   | (cell.attrs.overline ? HL_OVERLINE : 0)
-                   | (cell.attrs.italic ? HL_ITALIC : 0)
-                   | (cell.attrs.reverse ? HL_INVERSE : 0)
-                   | get_underline_hl_flag(cell.attrs)
-                   | (cell.attrs.strike ? HL_STRIKETHROUGH : 0)
+    // int hl_attrs = (cell.attrs.bold ? HL_BOLD : 0)
+    //                | (cell.attrs.dim ? HL_DIM : 0)
+    //                | (cell.attrs.blink ? HL_BLINK : 0)
+    //                | (cell.attrs.conceal ? HL_CONCEALED : 0)
+    //                | (cell.attrs.overline ? HL_OVERLINE : 0)
+    //                | (cell.attrs.italic ? HL_ITALIC : 0)
+    //                | (cell.attrs.reverse ? HL_INVERSE : 0)
+    //                | get_underline_hl_flag(cell.attrs)
+    //                | (cell.attrs.strike ? HL_STRIKETHROUGH : 0)
+    // TODO: update hl_attrs based on new attrs above
+    int hl_attrs = (style.flags.bold ? HL_BOLD : 0)
+                   | (style.flags.italic ? HL_ITALIC : 0)
+                   | (style.flags.inverse ? HL_INVERSE : 0)
+                   | get_underline_hl_flagz(style.flags.underline_style)
+                   | (style.flags.strikethrough ? HL_STRIKETHROUGH : 0)
                    | ((fg_indexed && !fg_set) ? HL_FG_INDEXED : 0)
                    | ((bg_indexed && !bg_set) ? HL_BG_INDEXED : 0);
 
@@ -1482,8 +1714,19 @@ void terminal_get_line_attributes(Terminal *term, win_T *wp, int linenr, int *te
       });
     }
 
-    if (cell.uri > 0) {
-      attr_id = hl_combine_attr(attr_id, cell.uri);
+    if (style.uri_len > 0) {
+      if (style.uri_id == last_uri_id) {
+        attr_id = hl_combine_attr(attr_id, uri_attr_id);
+      } else {
+        last_uri_id = style.uri_id;
+        // TODO: make this more efficient. Very unfortunate that the URL set uses C strings.
+        // Perhaps something can be done in the vterm_handler.zig to maintain its own set of
+        // URLs and save the attr IDs (or via callback).
+        char *uri = xmemdupz(style.uri, style.uri_len);
+        uri_attr_id = hl_add_url(0, uri);
+        attr_id = hl_combine_attr(attr_id, uri_attr_id);
+        // XFREE_CLEAR(uri);
+      }
     }
 
     term_attrs[col] = attr_id;
@@ -1555,6 +1798,26 @@ static int term_movecursor(VTermPos new_pos, VTermPos old_pos, int visible, void
   term->cursor.row = new_pos.row;
   term->cursor.col = new_pos.col;
   invalidate_terminal(term, -1, -1);
+  return 1;
+}
+
+static int term_movecursorz(size_t row, size_t col, size_t row_abs, void *data)
+{
+  // WLOG("moving cursor to (%d, %d)", row, col);
+  Terminal *term = data;
+  term->cursor.row = (int)row_abs;
+  term->cursor.col = (int)col;
+  invalidate_terminal(term, -1, -1);
+  return 1;
+}
+
+// size_t damage_count = 0;
+static int term_damagez(int start_row_abs, int end_row_abs, void *data)
+{
+  // damage_count++;
+  // WLOG("damage_count=%zu", damage_count);
+  // WLOG("term_damagzes: start_row_abs=%zu, end_row_abs=%zu", start_row_abs, end_row_abs);
+  invalidate_terminal(data, start_row_abs, end_row_abs);
   return 1;
 }
 
@@ -1664,11 +1927,28 @@ static int term_bell(void *data)
   return 1;
 }
 
-/// Called when the terminal wants to query the system theme.
+/// Called when the terminal wants to query the system theme (CSI ? 996 n).
 static int term_theme(bool *dark, void *data)
   FUNC_ATTR_NONNULL_ALL
 {
   *dark = (*p_bg == 'd');
+  return 1;
+}
+
+/// Enabled means we send unsolicited theme responses to the terminal (CSI ? 2031).
+static int term_report_color_scheme(bool enabled, void *data)
+  FUNC_ATTR_NONNULL_ALL
+{
+  Terminal *term = data;
+  term->theme_updates = enabled;
+  return 1;
+}
+
+static int term_forward_mouse(VTermZMouseForwardType forward_type, void *data)
+  FUNC_ATTR_NONNULL_ALL
+{
+  Terminal *term = data;
+  term->forward_mouse = (bool)forward_type;
   return 1;
 }
 
@@ -1791,6 +2071,23 @@ static int term_sb_clear(void *data)
   return 1;
 }
 
+static void term_clipboard_set_register(void **argv) {
+  char regname = (char)(uintptr_t)argv[0];
+  char *data = argv[1];
+
+  list_T *lines = tv_list_alloc(1);
+  tv_list_append_allocated_string(lines, data);
+
+  list_T *args = tv_list_alloc(3);
+  tv_list_append_list(args, lines);
+
+  const char regtype = 'v';
+  tv_list_append_string(args, &regtype, 1);
+
+  tv_list_append_string(args, &regname, 1);
+  eval_call_provider("clipboard", "set", args, true);
+}
+
 static void term_clipboard_set(void **argv)
 {
   VTermSelectionMask mask = (VTermSelectionMask)(long)argv[0];
@@ -1836,6 +2133,25 @@ static int term_selection_set(VTermSelectionMask mask, VTermStringFragment frag,
     multiqueue_put(main_loop.events, term_clipboard_set, (void *)mask, data);
   }
 
+  return 1;
+}
+
+static int on_clipboard_set(char kind, const char *data, size_t len, void *user)
+{
+  char *data_owned = xmemdupz(data, len);
+  char regname;
+  switch (kind) {
+    case 'c': 
+      regname = '+';
+      break;
+    case 'p':
+      regname = '*';
+      break;
+    default:
+      regname = '+';
+      break;
+  }
+  multiqueue_put(main_loop.events, term_clipboard_set_register, (void *)(uintptr_t)regname, data_owned);
   return 1;
 }
 
@@ -2234,7 +2550,9 @@ static bool send_mouse_event(Terminal *term, int c)
 
     VTermModifier mod = VTERM_MOD_NONE;
     convert_modifiers(&c, &mod);
-    mouse_action(term, button, row, col - offset, pressed, mod);
+    // mouse_action(term, button, row, col - offset, pressed, mod);
+    vtermz_mouse_action(term->vtz, (uint8_t)button, (size_t)row, (uint16_t)(col - offset), pressed, mod);
+
     return false;
   }
 
@@ -2268,7 +2586,9 @@ static bool send_mouse_event(Terminal *term, int c)
     }
 
     // Call the common mouse scroll function shared with other modes.
+    // WLOG("before do_mousescroll: sb_pending: %d, sb_deleted: %zu", term->sb_pending, term->sb_deleted);
     do_mousescroll(&cap);
+    // WLOG("after do_mousescroll: sb_pending: %d, sb_deleted: %zu", term->sb_pending, term->sb_deleted);
 
     curwin->w_redr_status = true;
     curwin = save_curwin;
@@ -2304,7 +2624,7 @@ static void fetch_row(Terminal *term, int row, int end_col)
   char *ptr = term->textbuf;
 
   while (col < end_col) {
-    VTermScreenCell cell;
+    VTermScreenCell cell = {0};
     fetch_cell(term, row, col, &cell);
     if (cell.schar) {
       schar_get_adv(&ptr, cell.schar);
@@ -2316,6 +2636,20 @@ static void fetch_row(Terminal *term, int row, int end_col)
   }
 
   // end of line
+  term->textbuf[line_len] = NUL;
+}
+
+static void fetch_rowz(Terminal *term, size_t row, size_t end_col)
+{
+  char *ptr = term->textbuf;
+  size_t line_len = vtermz_fill_buf_row_utf8(term->vtz, row, 0, end_col, ptr, TEXTBUF_SIZE);
+  term->textbuf[line_len] = NUL;
+}
+
+static void fetch_lnum(Terminal *term, size_t lnum, size_t end_col)
+{
+  char *ptr = term->textbuf;
+  size_t line_len = vtermz_fill_buf_lnum_utf8(term->vtz, lnum, 0, end_col, ptr, TEXTBUF_SIZE);
   term->textbuf[line_len] = NUL;
 }
 
@@ -2343,6 +2677,7 @@ static bool fetch_cell(Terminal *term, int row, int col, VTermScreenCell *cell)
 // queue a terminal instance for refresh
 static void invalidate_terminal(Terminal *term, int start_row, int end_row)
 {
+  // WLOG("invalidating term from %d to %d", start_row, end_row);
   if (start_row != -1 && end_row != -1) {
     term->invalid_start = MIN(term->invalid_start, start_row);
     term->invalid_end = MAX(term->invalid_end, end_row);
@@ -2378,8 +2713,10 @@ static void refresh_terminal(Terminal *term)
   }
   linenr_T ml_before = buf->b_ml.ml_line_count;
 
+  vtermz_refresh(term->vtz);
   bool resized = refresh_size(term, buf);
   refresh_scrollback(term, buf);
+  adjust_scrollbackz(term, buf);
   refresh_screen(term, buf);
 
   int ml_added = buf->b_ml.ml_line_count - ml_before;
@@ -2483,11 +2820,12 @@ static bool refresh_size(Terminal *term, buf_T *buf)
   }
 
   term->pending.resize = false;
-  int width, height;
-  vterm_get_size(term->vt, &height, &width);
+  uint16_t width, height;
+  vtermz_get_size(term->vtz, &height, &width);
   term->invalid_start = 0;
-  term->invalid_end = height;
-  term->opts.resize_cb((uint16_t)width, (uint16_t)height, term->opts.data);
+  // TODO: verify how this is used, check if we just need viewport height
+  term->invalid_end = (int)vtermz_total_rows(term->vtz);
+  term->opts.resize_cb(width, height, term->opts.data);
   return true;
 }
 
@@ -2533,6 +2871,35 @@ static void adjust_scrollback(Terminal *term, buf_T *buf)
   term->sb_size = scbk;
 }
 
+/// Adjusts scrollback storage and the terminal buffer scrollback lines
+static void adjust_scrollbackz(Terminal *term, buf_T *buf)
+{
+  if (buf->b_p_scbk < 1) {  // Local 'scrollback' was set to -1.
+    buf->b_p_scbk = SB_MAX;
+  }
+  const size_t scbk = (size_t)buf->b_p_scbk;
+
+  vtermz_refresh(term->vtz);
+  uint16_t height;
+  uint16_t width;
+  vtermz_get_size(term->vtz, &height, &width);
+  size_t term_scrollback = vtermz_total_rows(term->vtz) - height;
+
+  if (scbk < term_scrollback) {
+    size_t diff = term_scrollback - scbk;
+    vtermz_delete_from_scrollback(term->vtz, diff);
+    term->invalid_start = MAX(0, term->invalid_start - (int)diff);
+    term->invalid_end = MAX(0, term->invalid_end - (int)diff);
+    vtermz_refresh(term->vtz);
+    for (size_t i = 0; i < diff; i++) {
+      ml_delete_buf(buf, 1, false);
+    }
+    mark_adjust_buf(buf, 1, (linenr_T)diff, MAXLNUM, -(linenr_T)diff, true,
+                    kMarkAdjustTerm, kExtmarkUndo);
+    deleted_lines_buf(buf, 1, (linenr_T)diff);
+  }
+}
+
 // Refresh the scrollback of an invalidated terminal.
 static void refresh_scrollback(Terminal *term, buf_T *buf)
 {
@@ -2545,6 +2912,7 @@ static void refresh_scrollback(Terminal *term, buf_T *buf)
   mark_adjust_buf(buf, 1, deleted, MAXLNUM, -deleted, true, kMarkAdjustTerm, kExtmarkUndo);
   term->old_sb_deleted = term->sb_deleted;
 
+  // TODO: figure out what parts of the below I actually need, if any
   int old_height = term->old_height;
   int width, height;
   vterm_get_size(term->vt, &height, &width);
@@ -2589,12 +2957,30 @@ static void refresh_screen(Terminal *term, buf_T *buf)
 {
   int changed = 0;
   int added = 0;
-  int height;
-  int width;
-  vterm_get_size(term->vt, &height, &width);
-  // Terminal height may have decreased before `invalid_end` reflects it.
-  term->invalid_end = MIN(term->invalid_end, height);
+  uint16_t height;
+  uint16_t width;
+  // vterm_get_size(term->vt, &height, &width);
+  vtermz_get_size(term->vtz, &height, &width);
 
+  // Terminal height may have decreased before `invalid_end` reflects it.
+  size_t total_rows = vtermz_total_rows(term->vtz);
+  term->invalid_end = MIN(term->invalid_end, (int)total_rows);
+
+  // This can happen if the vterm is reset/cleared
+  if (buf->b_ml.ml_line_count > (int)total_rows) {
+    term->invalid_start = 0;
+    term->invalid_end = (int)total_rows;
+
+    size_t to_delete = (size_t)buf->b_ml.ml_line_count - total_rows;
+    for (size_t i = 0; i < to_delete; i++) {
+      ml_delete_buf(buf, (linenr_T)total_rows + 1, false);
+    }
+    mark_adjust_buf(buf, 1, (linenr_T)total_rows + 1, MAXLNUM, -(linenr_T)to_delete, true,
+                    kMarkAdjustTerm, kExtmarkUndo);
+    deleted_lines_buf(buf, (linenr_T)total_rows + 1, (linenr_T)to_delete);
+  }
+
+  // WLOG("refresh_screen invalid_start=%d, invalid_end=%d", term->invalid_start, term->invalid_end);
   // There are no invalid rows.
   if (term->invalid_start >= term->invalid_end) {
     term->invalid_start = INT_MAX;
@@ -2602,9 +2988,22 @@ static void refresh_screen(Terminal *term, buf_T *buf)
     return;
   }
 
-  for (int r = term->invalid_start, linenr = row_to_linenr(term, r);
-       r < term->invalid_end; r++, linenr++) {
-    fetch_row(term, r, width);
+  linenr_T linenr = term->invalid_start + 1;
+  linenr_T top_linenr = 0;
+  size_t row = 0;
+  for (int remaining = term->invalid_end - term->invalid_start; remaining > 0; row++, remaining--, linenr++) {
+    if (row % height == 0) {
+      if (top_linenr > 0) {
+        // scroll down by screen height
+        top_linenr = 1 + (int)vtermz_scroll_linenr(term->vtz, (size_t)MAX(top_linenr + height - 1, 0));
+      } else {
+        // initial scroll to invalid start
+        top_linenr = 1 + (int)vtermz_scroll_linenr(term->vtz, (size_t)MAX(linenr - 1, 0));
+      }
+      assert(linenr >= top_linenr);
+      row = (size_t)(linenr - top_linenr);
+    }
+    fetch_rowz(term, row, width);
 
     if (linenr <= buf->b_ml.ml_line_count) {
       ml_replace_buf(buf, linenr, term->textbuf, true, false);
@@ -2616,7 +3015,7 @@ static void refresh_screen(Terminal *term, buf_T *buf)
   }
   term->old_height = height;
 
-  int change_start = row_to_linenr(term, term->invalid_start);
+  int change_start = term->invalid_start + 1; // row_to_linenr(term, term->invalid_start);
   int change_end = change_start + changed;
   term->invalid_start = INT_MAX;
   term->invalid_end = -1;

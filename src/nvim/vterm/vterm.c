@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -147,6 +148,8 @@ void vterm_push_output_bytes(VTerm *vt, const char *bytes, size_t len)
     (vt->outfunc)(bytes, len, vt->outdata);
     return;
   }
+
+  assert(false);
 
   if (len > vt->outbuffer_len - vt->outbuffer_cur) {
     return;

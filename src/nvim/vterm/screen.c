@@ -949,6 +949,18 @@ int vterm_screen_get_cell(const VTermScreen *screen, VTermPos pos, VTermScreenCe
   cell->bg = intcell->pen.bg;
 
   cell->uri = intcell->pen.uri;
+  // if (cell->schar == '~') {
+  //   if (pos.col < (screen->cols - 1)) {
+  //     ScreenCell *adj = getcell(screen, pos.row, pos.col + 10);
+  //     WLOG("~ cell fgtype: %d, bgtype: %d", adj->pen.fg.type, adj->pen.bg.type);
+  //     if (VTERM_COLOR_IS_INDEXED(&adj->pen.fg)) {
+  //       WLOG("~ fg index: %d", adj->pen.fg.indexed.idx);
+  //     }
+  //     if (VTERM_COLOR_IS_INDEXED(&adj->pen.bg)) {
+  //       WLOG("~ bg index: %d", adj->pen.bg.indexed.idx);
+  //     }
+  //   }
+  // }
 
   if (pos.col < (screen->cols - 1)
       && getcell(screen, pos.row, pos.col + 1)->schar == (uint32_t)-1) {

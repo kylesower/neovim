@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "nvim/vterm/vterm_keycodes_defs.h"
 #include "nvim/types_defs.h"
 
 typedef struct VTerm VTerm;
@@ -335,3 +336,185 @@ typedef struct {
   schar_T schar;
   ScreenPen pen;
 } ScreenCell;
+
+
+//////////////////////////
+/// VTERMZ 
+//////////////////////////
+typedef struct VTermZ VTermZ;
+
+#define VTERMZ_COLOR_IS_DEFAULT(col) \
+  (col.type == VTERMZ_COLOR_NONE)
+
+#define VTERMZ_COLOR_IS_RGB(col) \
+  (col.type == VTERMZ_COLOR_RGB)
+
+#define VTERMZ_COLOR_IS_PALETTE(col) \
+  (col.type == VTERMZ_COLOR_PALETTE)
+
+typedef enum {
+    VTERMZ_UNDERLINE_NONE = 0,
+    VTERMZ_UNDERLINE_SINGLE = 1,
+    VTERMZ_UNDERLINE_DOUBLE = 2,
+    VTERMZ_UNDERLINE_CURLY = 3,
+    VTERMZ_UNDERLINE_DOTTED = 4,
+    VTERMZ_UNDERLINE_DASHED = 5,
+} VTermZUnderlineStyle;
+
+#define VTERMZ_COLOR_NONE 0
+#define VTERMZ_COLOR_RGB 1
+#define VTERMZ_COLOR_PALETTE 2
+typedef union {
+  uint8_t type;
+  struct {
+    uint8_t type;
+  } none;
+  struct {
+    uint8_t type;
+    uint8_t r;
+    uint8_t g;
+    uint8_t b;
+  } rgb;
+  struct {
+    uint8_t type;
+    uint8_t idx;
+  } palette;
+} VTermZColor;
+
+typedef struct {
+  VTermZColor fg, bg, underline_color;
+  const char *uri;
+  size_t uri_len;
+  uint16_t uri_id;
+  struct {
+      bool bold;
+      bool italic;
+      bool faint;
+      bool blink;
+      bool inverse;
+      bool invisible;
+      bool strikethrough;
+      bool overline;
+      uint8_t underline_style;
+  } flags;
+} VTermZStyle;
+
+typedef enum {
+  VTERMZ_TERMINATOR_BEL,  // \x07
+  VTERMZ_TERMINATOR_ST,  // \x1b\x5c
+} VTermZTerminator;
+
+typedef struct {
+  int command;  // 4 for palette colors, 10 for FG, 11 for BG, 12 for cursor
+  const char *buf; // Everything after the semicolon following the command (excluding terminator)
+  size_t len;
+  VTermZTerminator terminator; // The terminator used in the original request
+} VTermZOscColor;
+
+typedef enum {
+  VTERMZ_CURSOR_BLOCK = 1,
+  VTERMZ_CURSOR_UNDERLINE,
+  VTERMZ_CURSOR_BAR,
+} VTermZCursorShape;
+
+typedef struct {
+  bool blink;
+  bool visible;
+  VTermZCursorShape shape;
+} VTermZCursorStyle;
+
+typedef enum {
+  VTERMZ_MOUSE_FORWARD_NONE,
+  VTERMZ_MOUSE_FORWARD_NORMAL,
+  VTERMZ_MOUSE_FORWARD_BUTTON,
+  VTERMZ_MOUSE_FORWARD_ANY,
+} VTermZMouseForwardType;
+
+typedef struct {
+  // TODO: do we need these other callbacks?
+  // int (*moverect)(VTermRect dest, VTermRect src, void *user);
+  int (*movecursor)(size_t row, size_t col, size_t row_abs, void *user);
+  int (*damage)(int start_row_abs, int end_row_abs, void *user);
+  // damage: ?*const fn (start_row: usize, end_row: usize, start_lnum: usize, end_lnum: usize, user: ?*anyopaque) callconv(.c) c_int = null,
+  // int (*settermprop)(VTermProp prop, VTermValue *val, void *user);
+  int (*bell)(void *user);
+  int (*theme_request)(bool *dark, void *user);
+  int (*osc_color)(VTermZOscColor osc, void *user);
+  int (*on_apc)(const char *buf, size_t len, void *user);
+  int (*on_dcs)(const char *buf, size_t len, void *user);
+  int (*set_title)(const char *title, size_t len, void *user);
+  int (*cursor_style)(VTermZCursorStyle style, void *user);
+  int (*report_color_scheme)(bool enabled, void *user);
+  int (*forward_mouse)(VTermZMouseForwardType forward_type, void *user);
+  int (*set_clipboard)(char clipboard_kind, const char *data, size_t len, void *user);
+  // int (*sb_pushline)(int cols, const VTermScreenCell *cells, void *user);
+  // int (*sb_popline)(int cols, VTermScreenCell *cells, void *user);
+  // int (*sb_clear)(void *user);
+} VTermZCallbacks;
+typedef void VTermZOutputCallback(const char *s, size_t len, void *user);
+
+VTermZ *vtermz_new(uint16_t rows, uint16_t cols);
+void vtermz_screen_set_callbacks(VTermZ *vt, VTermZCallbacks *callbacks, void *user);
+void vtermz_free(VTermZ *vt);
+void vtermz_flush_damage(VTermZ *vt);
+void vtermz_print(VTermZ *vt);
+size_t vtermz_input_write(VTermZ *vt, const char *bytes, size_t len);
+void vtermz_set_utf8(VTermZ *vt, bool is_utf8);
+void vtermz_get_size(const VTermZ *vt, uint16_t *rowsp, uint16_t *colsp);
+void vtermz_set_size(VTermZ *vt, uint16_t rows, uint16_t cols);
+void vtermz_state_set_palette_color(VTermZ *vt, uint8_t index, const VTermColor *col);
+void vtermz_output_set_callback(VTermZ *vt, VTermZOutputCallback *func, void *user);
+void vtermz_keyboard_key(VTermZ *vtz, VTermKey key, VTermModifier mod);
+void vtermz_mouse_action(
+    VTermZ *vt,
+    uint8_t button,
+    size_t row,
+    uint16_t col,
+    bool pressed,
+    VTermModifier mod
+);
+void vtermz_teardown(void);
+void vtermz_refresh(VTermZ *vt);
+void vtermz_keyboard_unichar(VTermZ *vt, uint32_t c, VTermModifier mod);
+size_t vtermz_fill_buf_row_utf8(
+    const VTermZ *vt,
+    size_t row,
+    size_t start_col,
+    size_t end_col,
+    char *buf,
+    size_t buf_max_len
+);
+size_t vtermz_fill_buf_lnum_utf8(
+    const VTermZ *vt,
+    size_t lnum,
+    size_t start_col,
+    size_t end_col,
+    char *buf,
+    size_t buf_max_len
+);
+size_t vtermz_fill_buf_row_style(
+    const VTermZ *vt,
+    size_t row,
+    size_t start_col,
+    size_t end_col,
+    VTermZStyle *buf,
+    size_t buf_max_len
+);
+size_t vtermz_fill_buf_lnum_style(
+    const VTermZ *vt,
+    size_t lnum,
+    size_t start_col,
+    size_t end_col,
+    VTermZStyle *buf,
+    size_t buf_max_len
+);
+int vtermz_color_rgb_int(const VTermZ *vt, VTermZColor color);
+size_t vtermz_scroll_linenr(VTermZ *vt, size_t top_linenr);
+size_t vtermz_scroll_bottom(VTermZ *vt);
+size_t vtermz_top_linenr(VTermZ *vt);
+size_t vtermz_total_rows(VTermZ *vt);
+void vtermz_save_cursor(VTermZ *vt);
+void vtermz_restore_cursor(VTermZ *vt);
+void vtermz_start_paste(VTermZ *vt);
+void vtermz_end_paste(VTermZ *vt);
+size_t vtermz_delete_from_scrollback(VTermZ *vt, size_t count);
