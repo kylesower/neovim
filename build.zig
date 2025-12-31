@@ -302,6 +302,25 @@ pub fn build(b: *std.Build) !void {
     test_gen_step.dependOn(&config_install.step);
     test_gen_step.dependOn(&b.addInstallDirectory(.{ .source_dir = gen_headers.getDirectory(), .install_dir = .prefix, .install_subdir = "headers/" }).step);
 
+    const terminal_lib = b.addLibrary(.{
+        .name = "terminal",
+        .linkage = .static,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/nvim/terminal.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    if (b.lazyDependency("ghostty", .{})) |dep| {
+        terminal_lib.root_module.addImport("ghostty-vt", dep.module("ghostty-vt"));
+    }
+    terminal_lib.addIncludePath(b.path("src/nvim"));
+    terminal_lib.root_module.addIncludePath(b.path("src/nvim"));
+
+    const ghostty_install = b.addInstallArtifact(terminal_lib, .{});
+    const ghostty_step = b.step("ghostty", "build the ghostty vt library");
+    ghostty_step.dependOn(&ghostty_install.step);
+
     const nvim_exe = b.addExecutable(.{
         .name = "nvim",
         .root_module = b.createModule(.{
@@ -314,6 +333,7 @@ pub fn build(b: *std.Build) !void {
     nvim_exe.linkLibrary(lua);
     nvim_exe.linkLibrary(libuv);
     nvim_exe.linkLibrary(libluv);
+    nvim_exe.linkLibrary(terminal_lib);
     if (iconv) |dep| nvim_exe.linkLibrary(dep.artifact("iconv"));
     nvim_exe.linkLibrary(utf8proc.artifact("utf8proc"));
     if (unibilium) |u| nvim_exe.linkLibrary(u.artifact("unibilium"));
@@ -321,9 +341,9 @@ pub fn build(b: *std.Build) !void {
     if (is_windows) {
         nvim_exe.linkSystemLibrary("netapi32");
     }
-    nvim_exe.addIncludePath(b.path("src"));
-    nvim_exe.addIncludePath(gen_config.getDirectory());
-    nvim_exe.addIncludePath(gen_headers.getDirectory());
+    nvim_exe.root_module.addIncludePath(b.path("src"));
+    nvim_exe.root_module.addIncludePath(gen_config.getDirectory());
+    nvim_exe.root_module.addIncludePath(gen_headers.getDirectory());
     build_lua.add_lua_modules(nvim_exe.root_module, lpeg, use_luajit, false);
 
     var unit_test_sources = try std.ArrayList([]u8).initCapacity(b.allocator, 10);
@@ -349,6 +369,7 @@ pub fn build(b: *std.Build) !void {
         "-std=gnu99",
         "-DZIG_BUILD",
         "-D_GNU_SOURCE",
+        "-fno-sanitize=object-size",
         if (support_unittests) "-DUNIT_TESTING" else "",
         if (use_luajit) "" else "-DNVIM_VENDOR_BIT",
         if (is_windows) "-DMSWIN" else "",
@@ -378,6 +399,7 @@ pub fn build(b: *std.Build) !void {
     const nvim_exe_install = b.addInstallArtifact(nvim_exe, .{});
 
     nvim_exe_step.dependOn(&nvim_exe_install.step);
+    nvim_exe_step.dependOn(&ghostty_install.step);
 
     const gen_runtime = try runtime.nvim_gen_runtime(b, nlua0, funcs_data);
 

@@ -64,6 +64,10 @@
             .url = "git+https://github.com/tree-sitter-grammars/tree-sitter-query?ref=v0.8.0#a225e21d81201be77da58de614e2b7851735677a",
             .hash = "N-V-__8AAMR5AwAzZ5_8S2p2COTEf5usBeeT4ORzh-lBGkWy",
         },
+        .ghostty = .{
+            .url = "git+https://github.com/ghostty-org/ghostty#d3666d6ef94985105567a5f8022305d64c76c762",
+            .hash = "ghostty-1.3.0-dev-5UdBCw7IRQSm8PBEzyfwHfT2bweR_wityDDQC7n-_hEz",
+        },
     },
     .paths = .{
         // TODO(bfredl): explicitly list the subdirs which actually are used
