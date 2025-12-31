@@ -314,8 +314,11 @@ pub fn build(b: *std.Build) !void {
     if (b.lazyDependency("ghostty", .{})) |dep| {
         terminal_lib.root_module.addImport("ghostty-vt", dep.module("ghostty-vt"));
     }
-    terminal_lib.addIncludePath(b.path("src/nvim"));
+    // terminal_lib.addIncludePath(b.path("src/nvim"));
+    terminal_lib.root_module.addIncludePath(b.path("src"));
     terminal_lib.root_module.addIncludePath(b.path("src/nvim"));
+    terminal_lib.root_module.addIncludePath(gen_config.getDirectory());
+    terminal_lib.root_module.addIncludePath(gen_headers.getDirectory());
 
     const ghostty_install = b.addInstallArtifact(terminal_lib, .{});
     const ghostty_step = b.step("ghostty", "build the ghostty vt library");
