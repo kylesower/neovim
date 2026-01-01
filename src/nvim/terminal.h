@@ -35,3 +35,4 @@ void vtermz_set_size(VTermZ *vt, int rows, int cols);
 void vtermz_state_set_palette_color(VTermZ *vt, int index, const VTermColor *col);
 void vtermz_output_set_callback(VTermZ *vt, VTermOutputCallback *func, void *user);
 void vtermz_keyboard_key(VTermZ *vtz, VTermKey key, VTermModifier mod);
+void vtermz_teardown(void);

@@ -430,6 +430,7 @@ void terminal_teardown(void)
   multiqueue_free(refresh_timer.events);
   time_watcher_close(&refresh_timer, NULL);
   set_destroy(ptr_t, &invalidated_terminals);
+  vtermz_teardown();
   // terminal_destroy might be called after terminal_teardown is invoked
   // make sure it is in an empty, valid state
   invalidated_terminals = (Set(ptr_t)) SET_INIT;
