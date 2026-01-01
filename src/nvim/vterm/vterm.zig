@@ -1460,12 +1460,24 @@ pub const VTermColor = extern union {
 //   });
 // }
 //
+
+// TODO: find reasonable default size
+pub const APC_BUF_DEFAULT_SIZE = 4096;
 const Terminal = ghostty_vt.Terminal;
 pub const VTerm = struct {
     t: ghostty_vt.Terminal,
     rs: ghostty_vt.RenderState,
     parser: ghostty_vt.Parser,
     allocator: std.mem.Allocator,
+    apc_buf: std.ArrayList(u8),
+
+    const Self = @This();
+    pub fn reset_apc_buf(self: *Self) void {
+        if (self.apc_buf.items.len > APC_BUF_DEFAULT_SIZE) {
+            self.apc_buf.shrinkAndFree(self.allocator, APC_BUF_DEFAULT_SIZE);
+        }
+        self.apc_buf.items.len = 0;
+    }
 };
 
 // DONE
@@ -1485,6 +1497,7 @@ pub export fn vtermz_new(rows: c_int, cols: c_int) callconv(.c) *VTerm {
     vt.rs = rs;
     vt.parser = ghostty_vt.Parser.init();
     vt.parser.osc_parser.alloc = vt.allocator;
+    vt.apc_buf = std.ArrayList(u8).initCapacity(alloc, APC_BUF_DEFAULT_SIZE) catch preserve_exit(e_outofmem);
     vt.allocator = alloc;
     return vt;
 }
@@ -1504,13 +1517,18 @@ pub export fn vtermz_input_write(vt: *VTerm, bytes: [*]const u8, len: usize) cal
     // const input = "\x1b]4;1;?\x1b\\";
     var osc_last_terminator: ghostty_vt.osc.Terminator = .bel;
     var last_action: ghostty_vt.Parser.Action = .apc_start;
+    // TODO: figure out a good tmp buffer size. We use this buffer so we can appendSlice
+    // rather than append one byte at a time.
+    const TMP_APC_BUF_LEN = 256;
+    var tmp_apc_buf: [TMP_APC_BUF_LEN]u8 = .{0} ** TMP_APC_BUF_LEN;
+    var tmp_apc_buf_len: usize = 0;
     for (0..len) |i| {
         const b = bytes[i];
-        std.debug.print("parsing byte: {x}\n", .{b});
+        // std.debug.print("parsing byte: {x}\n", .{b});
         for (vt.parser.next(b)) |action| if (action) |a| {
             switch (a) {
                 .print => |ch| {
-                    std.debug.print("WAT: got ch {x}\n", .{ch});
+                    // std.debug.print("WAT: got ch {x}\n", .{ch});
                     vt.t.print(ch) catch {};
                     // _ = ch;
                     // TODO: dunno what to do with error
@@ -1519,26 +1537,40 @@ pub export fn vtermz_input_write(vt: *VTerm, bytes: [*]const u8, len: usize) cal
 
                 },
                 .csi_dispatch => |csi| {
-                    std.debug.print("WAT: got csi dispatch\n", .{});
+                    // std.debug.print("WAT: got csi dispatch\n", .{});
                     _ = csi;
                 },
                 .apc_start => {
-                    std.debug.print("WAT: got apc start\n", .{});
+                    // std.debug.print("WAT: got apc start\n", .{});
                 },
-                .apc_put => {
-                    std.debug.print("WAT: got apc put\n", .{});
+                .apc_put => |ch| {
+                    tmp_apc_buf[tmp_apc_buf_len] = ch;
+                    tmp_apc_buf_len += 1;
+                    if (tmp_apc_buf_len == TMP_APC_BUF_LEN) {
+                        vt.apc_buf.appendSlice(
+                            vt.allocator,
+                            &tmp_apc_buf,
+                        ) catch preserve_exit(e_outofmem);
+                        tmp_apc_buf_len = 0;
+                    }
                 },
                 .apc_end => {
-                    std.debug.print("WAT: got apc end\n", .{});
+                    vt.apc_buf.appendSlice(
+                        vt.allocator,
+                        tmp_apc_buf[0..tmp_apc_buf_len],
+                    ) catch preserve_exit(e_outofmem);
+                    std.debug.print("got apc command: {s}\n", .{vt.apc_buf.items});
+                    // TODO: call callback for APC
+                    vt.reset_apc_buf();
                 },
                 .dcs_hook => {
-                    std.debug.print("WAT: got dcs hook\n", .{});
+                    // std.debug.print("WAT: got dcs hook\n", .{});
                 },
                 .dcs_put => {
-                    std.debug.print("WAT: got dcs put\n", .{});
+                    // std.debug.print("WAT: got dcs put\n", .{});
                 },
                 .dcs_unhook => {
-                    std.debug.print("WAT: got dcs unhook\n", .{});
+                    // std.debug.print("WAT: got dcs unhook\n", .{});
                 },
                 .esc_dispatch => |esc| {
                     // // When using the ST rather than BEL, osc_dispatch executes on \x1b, and
@@ -1550,6 +1582,7 @@ pub export fn vtermz_input_write(vt: *VTerm, bytes: [*]const u8, len: usize) cal
                     // }
                     if (esc.intermediates.len == 0 and esc.final == '\\') continue;
                     if (esc.intermediates.len == 0) switch (esc.final) {
+                        // TODO: get rid of duplication with the .execute branch.
                         'D' => vt.t.cursorDown(1),
                         'E' => {
                             vt.t.carriageReturn();
@@ -1560,7 +1593,6 @@ pub export fn vtermz_input_write(vt: *VTerm, bytes: [*]const u8, len: usize) cal
                             std.debug.print("unimplemented esc.final: {x}", .{esc.final});
                         },
                     } else {
-                        // TODO: I'm not really sure what these slots mean
                         // Ignore charset stuff for now.
                         // const slot: ghostty_vt.CharsetSlot = switch (esc.intermediates[0]) {
                         //     '(' => .G0,
@@ -1633,6 +1665,7 @@ test "vterm" {
     const st = "\x1b\\";
     // const more = "\x84\x85\x88\x9c\x9c\x9c\x9d4;1;?\x9c\\";
     const esc_seq = "\x1b(0\x1b(B\x1b(A\x1b(0";
+    const apc_seq = "\x1b_nvim;stuff;ARSITENARISENTIAERNSTIEARNST\x1b\\";
     const commands: []const []const u8 = &.{
         osc_4,
         bel,
@@ -1646,6 +1679,7 @@ test "vterm" {
         dcs,
         st,
         esc_seq,
+        apc_seq,
     };
 
     var res: usize = 0;
