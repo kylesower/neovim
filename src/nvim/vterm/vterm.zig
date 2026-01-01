@@ -282,6 +282,7 @@ pub const MOUSE_WANT_CLICK = 0x01;
 pub const MOUSE_WANT_DRAG = 0x02;
 pub const MOUSE_WANT_MOVE = 0x04;
 pub const VTermState = extern struct {
+    vt: *VTerm,
     //   VTerm *vt;
     //
     //   const VTermStateCallbacks *callbacks;
@@ -323,7 +324,7 @@ pub const VTermState = extern struct {
     //
     //   // Bitvector of tab stops
     //   uint8_t *tabstops;
-    tabstops: u8,
+    tabstops: [*]u8,
     //
     //   // Primary and Altscreen; lineinfos[1] is lazily allocated as needed
     //   VTermLineInfo *lineinfos[2];
@@ -332,8 +333,8 @@ pub const VTermState = extern struct {
     //   VTermLineInfo *lineinfo;
 
     // TODO: type, make sure this is right
-    // lineinfos: [2]?*VTermLineInfo,
-    // lineinfo: ?*VTermLineInfo,
+    lineinfos: [2]?*VTermLineInfo,
+    lineinfo: ?*VTermLineInfo,
 
     // #define ROWWIDTH(state, \
     //                  row) ((state)->lineinfo[(row)].doublewidth ? ((state)->cols / 2) : (state)->cols)
@@ -483,80 +484,93 @@ pub const VTermState = extern struct {
 //   VTermState *state;
 //   VTermScreen *screen;
 // };
+pub const VTermParserState = enum(u8) {
+    normal,
+    csi_leader,
+    csi_args,
+    csi_intermed,
+    dcs_command,
+    // below here are the "string states"
+    osc_command,
+    osc,
+    dcs_vterm,
+    apc,
+    pm,
+    sos,
+};
 pub const VTerm = extern struct {
-    //   const VTermAllocatorFunctions *allocator;
-    //   void *allocdata;
-    //
-    //   int rows;
-    //   int cols;
-    //
-    //   struct {
-    //     unsigned utf8:1;
-    //     unsigned ctrl8bit:1;
-    //   } mode;
-    //
-    //   struct {
-    //     enum VTermParserState {
-    //       NORMAL,
-    //       CSI_LEADER,
-    //       CSI_ARGS,
-    //       CSI_INTERMED,
-    //       DCS_COMMAND,
-    //       // below here are the "string states"
-    //       OSC_COMMAND,
-    //       OSC,
-    //       DCS_VTERM,
-    //       APC,
-    //       PM,
-    //       SOS,
-    //     } state;
-    //
-    //     bool in_esc : 1;
-    //
-    //     int intermedlen;
-    //     char intermed[INTERMED_MAX];
-    //
-    //     union {
-    //       struct {
-    //         int leaderlen;
-    //         char leader[CSI_LEADER_MAX];
-    //
-    //         int argi;
-    //         long args[CSI_ARGS_MAX];
-    //       } csi;
-    //       struct {
-    //         int command;
-    //       } osc;
-    //       struct {
-    //         int commandlen;
-    //         char command[CSI_LEADER_MAX];
-    //       } dcs;
-    //     } v;
-    //
-    //     const VTermParserCallbacks *callbacks;
-    //     void *cbdata;
-    //
-    //     bool string_initial;
-    //
-    //     bool emit_nul;
-    //   } parser;
-    //
+    allocator: *const VTermAllocatorFunctions,
+    allocdata: ?*anyopaque, // useless field
+    rows: c_int,
+    cols: c_int,
+    mode: extern struct {
+        utf8: bool,
+        ctrl8bit: bool,
+    },
+    parser: extern struct {
+        state: VTermParserState,
+        in_esc: bool,
+        intermedlen: c_int,
+        intermed: [INTERMED_MAX]u8,
+        //     union {
+        //       struct {
+        //         int leaderlen;
+        //         char leader[CSI_LEADER_MAX];
+        //
+        //         int argi;
+        //         long args[CSI_ARGS_MAX];
+        //       } csi;
+        //       struct {
+        //         int command;
+        //       } osc;
+        //       struct {
+        //         int commandlen;
+        //         char command[CSI_LEADER_MAX];
+        //       } dcs;
+        //     } v;
+        v: extern union {
+            csi: extern struct {
+                leaderlen: c_int,
+                leader: [CSI_LEADER_MAX]u8,
+                argi: c_int,
+                args: [CSI_ARGS_MAX]c_long,
+            },
+            osc: extern struct {
+                command: c_int,
+            },
+            dcs: extern struct {
+                commandlen: c_int,
+                command: [CSI_LEADER_MAX]u8,
+            },
+        },
+        callbacks: ?*VTermParserCallbacks,
+        cbdata: ?*anyopaque,
+        string_initial: bool,
+        emit_nul: bool,
+    },
+
     //   // len == malloc()ed size; cur == number of valid bytes
     //
     //   VTermOutputCallback *outfunc;
     //   void *outdata;
-    //
     //   char *outbuffer;
     //   size_t outbuffer_len;
     //   size_t outbuffer_cur;
+    outfunc: ?*VTermOutputCallback,
+    outdata: ?*anyopaque,
+    outbuffer: [*]u8,
+    outbuffer_len: usize,
+    outbuffer_cur: usize,
     //
     //   char *tmpbuffer;
+    tmpbuffer: [*]u8,
     //   size_t tmpbuffer_len;
+    tmpbuffer_len: usize,
     //
     //   VTermState *state;
     //   VTermScreen *screen;
-    state: *VTermState,
-    screen: *VTermScreen,
+    state: ?*VTermState,
+    screen: ?*VTermScreen,
 };
 //
 // struct VTermEncoding {
@@ -993,12 +1007,13 @@ pub const VTermStateFields = extern struct {
 //   void (*free)(void *ptr, void *allocdata);
 // } VTermAllocatorFunctions;
 pub const VTermAllocatorFunctions = extern struct {
-    malloc: *const fn (size: usize, allocdata: *anyopaque) callconv(.c) *anyopaque,
-    free: *const fn (ptr: *anyopaque, allocdata: *anyopaque) callconv(.c) void,
+    malloc: *const fn (size: usize, allocdata: ?*anyopaque) callconv(.c) *anyopaque,
+    free: *const fn (ptr: *anyopaque, allocdata: ?*anyopaque) callconv(.c) void,
 };
 
 // // Setting output callback will override the buffer logic
 // typedef void VTermOutputCallback(const char *s, size_t len, void *user);
+const VTermOutputCallback = *const fn (s: [*]const u8, len: usize, user: *anyopaque) callconv(.c) void;
 //
 // struct VTermBuilder {
 //   int ver;  // currently unused but reserved for some sort of ABI version flag
@@ -1013,13 +1028,13 @@ pub const VTermAllocatorFunctions = extern struct {
 //   size_t tmpbuffer_len;  // default: 4096
 // };
 pub const VTermBuilder = extern struct {
-    ver: c_int,
+    ver: c_int = 0,
     rows: c_int,
     cols: c_int,
-    allocator: ?*const VTermAllocatorFunctions,
-    allocdata: *anyopaque,
-    outbuffer_len: usize,
-    tmpbuffer_len: usize,
+    allocator: ?*const VTermAllocatorFunctions = null,
+    allocdata: ?*anyopaque = null,
+    outbuffer_len: usize = 4096,
+    tmpbuffer_len: usize = 4096,
 };
 
 // typedef struct {
@@ -1110,6 +1125,54 @@ pub const VTermSelectionCallbacks = extern struct {
 //   int (*sos)(VTermStringFragment frag, void *user);
 //   int (*resize)(int rows, int cols, void *user);
 // } VTermParserCallbacks;
+pub const VTermParserCallbacks = extern struct {
+    //   int (*text)(const char *bytes, size_t len, void *user);
+    text: ?*const fn (bytes: [*]const u8, len: usize, user: *anyopaque) callconv(.c) c_int,
+    //   int (*control)(uint8_t control, void *user);
+    control: ?*const fn (control: u8, user: *anyopaque) callconv(.c) c_int,
+    //   int (*escape)(const char *bytes, size_t len, void *user);
+    escape: ?*const fn (bytes: [*]const u8, len: usize, user: *anyopaque) callconv(.c) c_int,
+    //   int (*csi)(const char *leader, const long args[], int argcount, const char *intermed,
+    //              char command, void *user);
+    csi: ?*const fn (
+        leader: [*]const u8,
+        args: [*]const c_long,
+        argcount: c_int,
+        intermed: [*]const u8,
+        command: u8,
+        user: *anyopaque,
+    ) callconv(.c) c_int,
+    //   int (*osc)(int command, VTermStringFragment frag, void *user);
+    osc: ?*const fn (
+        command: c_int,
+        frag: VTermStringFragment,
+        user: *anyopaque,
+    ) callconv(.c) c_int,
+    //   int (*dcs)(const char *command, size_t commandlen, VTermStringFragment frag, void *user);
+    dcs: ?*const fn (
+        command: [*]const u8,
+        commandlen: usize,
+        frag: VTermStringFragment,
+        user: *anyopaque,
+    ) callconv(.c) c_int,
+    //   int (*apc)(VTermStringFragment frag, void *user);
+    apc: ?*const fn (
+        frag: VTermStringFragment,
+        user: *anyopaque,
+    ) callconv(.c) c_int,
+    //   int (*pm)(VTermStringFragment frag, void *user);
+    pm: ?*const fn (
+        frag: VTermStringFragment,
+        user: *anyopaque,
+    ) callconv(.c) c_int,
+    //   int (*sos)(VTermStringFragment frag, void *user);
+    sos: ?*const fn (
+        frag: VTermStringFragment,
+        user: *anyopaque,
+    ) callconv(.c) c_int,
+    //   int (*resize)(int rows, int cols, void *user);
+    resize: ?*const fn (rows: c_int, cols: c_int, user: *anyopaque) callconv(.c) c_int,
+};
 
 // // State of the pen at some moment in time, also used in a cell
 // typedef struct {
@@ -1350,7 +1413,7 @@ pub const VTermScreen = extern struct {
 //   }
 //   return ptr;
 // }
-pub fn default_malloc(size: usize, allocdata: *anyopaque) callconv(.c) *anyopaque {
+pub fn default_malloc(size: usize, allocdata: ?*anyopaque) callconv(.c) *anyopaque {
     _ = allocdata;
     // xmalloc never returns NULL
     const ptr = c.xmalloc(size);
@@ -1362,7 +1425,7 @@ pub fn default_malloc(size: usize, allocdata: *anyopaque) callconv(.c) *anyopaqu
 // {
 //   xfree(ptr);
 // }
-pub fn default_free(ptr: *anyopaque, allocdata: *anyopaque) callconv(.c) void {
+pub fn default_free(ptr: *anyopaque, allocdata: ?*anyopaque) callconv(.c) void {
     _ = allocdata;
     c.xfree(ptr);
 }
@@ -1384,8 +1447,8 @@ pub const default_allocator: VTermAllocatorFunctions = .{
 //     .cols = cols,
 //   });
 // }
-pub fn vterm_new(rows: c_int, cols: c_int) *VTerm {
-    return vterm_build(.{
+pub export fn vterm_new(rows: c_int, cols: c_int) *VTerm {
+    return vterm_build(&.{
         .rows = rows,
         .cols = cols,
     });
@@ -1393,127 +1456,94 @@ pub fn vterm_new(rows: c_int, cols: c_int) *VTerm {
 
 // #define DEFAULT(v, def)  ((v) ? (v) : (def))
 pub export fn vterm_build(builder: *const VTermBuilder) *VTerm {
-    const allocator = if (builder.allocator) |a| a else &default_allocator;
-    _ = allocator;
-    @panic("not implemented");
-    // return .{};
     //   const VTermAllocatorFunctions *allocator = DEFAULT(builder->allocator, &default_allocator);
-    //
+    const allocator = if (builder.allocator) |a| a else &default_allocator;
     //   // Need to bootstrap using the allocator function directly
     //   VTerm *vt = (*allocator->malloc)(sizeof(VTerm), builder->allocdata);
-    //
+    var vt: *VTerm = @ptrCast(@alignCast(allocator.malloc(@sizeOf(VTerm), builder.allocdata)));
     //   vt->allocator = allocator;
+    vt.allocator = allocator;
     //   vt->allocdata = builder->allocdata;
-    //
+    vt.allocdata = builder.allocdata;
     //   vt->rows = builder->rows;
+    vt.rows = builder.rows;
     //   vt->cols = builder->cols;
-    //
+    vt.cols = builder.cols;
     //   vt->parser.state = NORMAL;
-    //
+    vt.parser.state = .normal;
+
     //   vt->parser.callbacks = NULL;
+    vt.parser.callbacks = null;
     //   vt->parser.cbdata = NULL;
-    //
+    vt.parser.cbdata = null;
     //   vt->parser.emit_nul = false;
-    //
+    vt.parser.emit_nul = false;
     //   vt->outfunc = NULL;
+    vt.outfunc = null;
     //   vt->outdata = NULL;
-    //
+    vt.outdata = null;
     //   vt->outbuffer_len = DEFAULT(builder->outbuffer_len, 4096);
+    vt.outbuffer_len = builder.outbuffer_len;
     //   vt->outbuffer_cur = 0;
+    vt.outbuffer_cur = 0;
     //   vt->outbuffer = vterm_allocator_malloc(vt, vt->outbuffer_len);
-    //
+    vt.outbuffer = @ptrCast(vterm_allocator_malloc(vt, vt.outbuffer_len));
     //   vt->tmpbuffer_len = DEFAULT(builder->tmpbuffer_len, 4096);
+    vt.tmpbuffer_len = builder.tmpbuffer_len;
     //   vt->tmpbuffer = vterm_allocator_malloc(vt, vt->tmpbuffer_len);
-    //
-    //   return vt;
+    vt.tmpbuffer = @ptrCast(vterm_allocator_malloc(vt, vt.tmpbuffer_len));
+
+    return vt;
+}
+
+const screen = @import("screen.zig");
+const state = @import("state.zig");
+pub export fn vterm_free(vt: *VTerm) callconv(.c) void {
+    if (vt.screen) |s| {
+        screen.vterm_screen_free(s);
+    }
+
+    if (vt.state) |s| {
+        state.vterm_state_free(s);
+    }
+
+    vterm_allocator_free(vt, vt.outbuffer);
+    vterm_allocator_free(vt, vt.tmpbuffer);
+
+    vterm_allocator_free(vt, vt);
+}
+
+pub export fn vterm_allocator_malloc(vt: *VTerm, size: usize) callconv(.c) *anyopaque {
+    return vt.allocator.malloc(size, vt.allocdata);
+}
+
+pub export fn vterm_allocator_free(vt: *VTerm, ptr: *anyopaque) callconv(.c) void {
+    vt.allocator.free(ptr, vt.allocdata);
+}
+
+pub export fn vterm_get_size(vt: *const VTerm, rowsp: ?*c_int, colsp: ?*c_int) callconv(.c) void {
+    if (rowsp) |row| {
+        row.* = vt.rows;
+    }
+    if (colsp) |col| {
+        col.* = vt.cols;
+    }
+}
+
+pub export fn vterm_set_size(vt: *VTerm, rows: c_int, cols: c_int) callconv(.c) void {
+    if (rows < 1 or cols < 1) {
+        return;
+    }
+
+    vt.rows = rows;
+    vt.cols = cols;
+    const callbacks = vt.parser.callbacks orelse return;
+    const resize = callbacks.resize orelse return;
+    const cbdata = vt.parser.cbdata orelse return;
+    _ = resize(rows, cols, cbdata);
 }
 
 //
-// // A handy macro for defaulting values out of builder fields
-// #define DEFAULT(v, def)  ((v) ? (v) : (def))
-//
-// VTerm *vterm_build(const struct VTermBuilder *builder)
-// {
-//   const VTermAllocatorFunctions *allocator = DEFAULT(builder->allocator, &default_allocator);
-//
-//   // Need to bootstrap using the allocator function directly
-//   VTerm *vt = (*allocator->malloc)(sizeof(VTerm), builder->allocdata);
-//
-//   vt->allocator = allocator;
-//   vt->allocdata = builder->allocdata;
-//
-//   vt->rows = builder->rows;
-//   vt->cols = builder->cols;
-//
-//   vt->parser.state = NORMAL;
-//
-//   vt->parser.callbacks = NULL;
-//   vt->parser.cbdata = NULL;
-//
-//   vt->parser.emit_nul = false;
-//
-//   vt->outfunc = NULL;
-//   vt->outdata = NULL;
-//
-//   vt->outbuffer_len = DEFAULT(builder->outbuffer_len, 4096);
-//   vt->outbuffer_cur = 0;
-//   vt->outbuffer = vterm_allocator_malloc(vt, vt->outbuffer_len);
-//
-//   vt->tmpbuffer_len = DEFAULT(builder->tmpbuffer_len, 4096);
-//   vt->tmpbuffer = vterm_allocator_malloc(vt, vt->tmpbuffer_len);
-//
-//   return vt;
-// }
-//
-// void vterm_free(VTerm *vt)
-// {
-//   if (vt->screen) {
-//     vterm_screen_free(vt->screen);
-//   }
-//
-//   if (vt->state) {
-//     vterm_state_free(vt->state);
-//   }
-//
-//   vterm_allocator_free(vt, vt->outbuffer);
-//   vterm_allocator_free(vt, vt->tmpbuffer);
-//
-//   vterm_allocator_free(vt, vt);
-// }
-//
-// void *vterm_allocator_malloc(VTerm *vt, size_t size)
-// {
-//   return (*vt->allocator->malloc)(size, vt->allocdata);
-// }
-//
-// void vterm_allocator_free(VTerm *vt, void *ptr)
-// {
-//   (*vt->allocator->free)(ptr, vt->allocdata);
-// }
-//
-// void vterm_get_size(const VTerm *vt, int *rowsp, int *colsp)
-// {
-//   if (rowsp) {
-//     *rowsp = vt->rows;
-//   }
-//   if (colsp) {
-//     *colsp = vt->cols;
-//   }
-// }
-//
-// void vterm_set_size(VTerm *vt, int rows, int cols)
-// {
-//   if (rows < 1 || cols < 1) {
-//     return;
-//   }
-//
-//   vt->rows = rows;
-//   vt->cols = cols;
-//
-//   if (vt->parser.callbacks && vt->parser.callbacks->resize) {
-//     (*vt->parser.callbacks->resize)(rows, cols, vt->parser.cbdata);
-//   }
-// }
 //
 // void vterm_set_utf8(VTerm *vt, int is_utf8)
 // {
