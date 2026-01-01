@@ -28,6 +28,9 @@ const c = @cImport({
 });
 const std = @import("std");
 const ghostty_vt = @import("ghostty-vt");
+const vterm_handler = @import("vterm_handler.zig");
+const Handler = vterm_handler.Handler;
+const Stream = vterm_handler.Stream;
 // TODO: set logFn to log to nvim log file
 
 fn test_preserve_exit(e: [*c]const u8) noreturn {
@@ -605,6 +608,13 @@ pub const VTermKeyEncodingStack = struct {
 // //   C1_ST  = 0x9c,
 // //   C1_OSC = 0x9d,
 // // };
+pub const C1 = enum(u8) {
+    ss3 = 0x8f,
+    dcs = 0x90,
+    csi = 0x9b,
+    st = 0x9c,
+    osc = 0x9d,
+};
 // // ================================================================================
 // // END VTERM INTERNAL
 // // ================================================================================
@@ -1027,7 +1037,7 @@ pub const VTermColor = extern union {
 //
 // // // Setting output callback will override the buffer logic
 // // typedef void VTermOutputCallback(const char *s, size_t len, void *user);
-const VTermOutputCallback = *const fn (s: [*]const u8, len: usize, user: *anyopaque) callconv(.c) void;
+const VTermOutputCallback = *const fn (s: [*]const u8, len: usize, user: ?*anyopaque) callconv(.c) void;
 // //
 // // struct VTermBuilder {
 // //   int ver;  // currently unused but reserved for some sort of ABI version flag
@@ -1759,13 +1769,60 @@ const keycodes_kp_csiu: []const KeyCodes = &.{
 // ================================================================================
 // END KEYBOARD
 // ================================================================================
+// Available terminal modes:
+// const entries: []const ModeEntry = &.{
+//     // ANSI
+//     .{ .name = "disable_keyboard", .value = 2, .ansi = true }, // KAM
+//     .{ .name = "insert", .value = 4, .ansi = true },
+//     .{ .name = "send_receive_mode", .value = 12, .ansi = true, .default = true }, // SRM
+//     .{ .name = "linefeed", .value = 20, .ansi = true },
+//
+//     // DEC
+//     .{ .name = "cursor_keys", .value = 1 }, // DECCKM
+//     .{ .name = "132_column", .value = 3 },
+//     .{ .name = "slow_scroll", .value = 4 },
+//     .{ .name = "reverse_colors", .value = 5 },
+//     .{ .name = "origin", .value = 6 },
+//     .{ .name = "wraparound", .value = 7, .default = true },
+//     .{ .name = "autorepeat", .value = 8 },
+//     .{ .name = "mouse_event_x10", .value = 9 },
+//     .{ .name = "cursor_blinking", .value = 12 },
+//     .{ .name = "cursor_visible", .value = 25, .default = true },
+//     .{ .name = "enable_mode_3", .value = 40 },
+//     .{ .name = "reverse_wrap", .value = 45 },
+//     .{ .name = "alt_screen_legacy", .value = 47 },
+//     .{ .name = "keypad_keys", .value = 66 },
+//     .{ .name = "enable_left_and_right_margin", .value = 69 },
+//     .{ .name = "mouse_event_normal", .value = 1000 },
+//     .{ .name = "mouse_event_button", .value = 1002 },
+//     .{ .name = "mouse_event_any", .value = 1003 },
+//     .{ .name = "focus_event", .value = 1004 },
+//     .{ .name = "mouse_format_utf8", .value = 1005 },
+//     .{ .name = "mouse_format_sgr", .value = 1006 },
+//     .{ .name = "mouse_alternate_scroll", .value = 1007, .default = true },
+//     .{ .name = "mouse_format_urxvt", .value = 1015 },
+//     .{ .name = "mouse_format_sgr_pixels", .value = 1016 },
+//     .{ .name = "ignore_keypad_with_numlock", .value = 1035, .default = true },
+//     .{ .name = "alt_esc_prefix", .value = 1036, .default = true },
+//     .{ .name = "alt_sends_escape", .value = 1039 },
+//     .{ .name = "reverse_wrap_extended", .value = 1045 },
+//     .{ .name = "alt_screen", .value = 1047 },
+//     .{ .name = "save_cursor", .value = 1048 },
+//     .{ .name = "alt_screen_save_cursor_clear_enter", .value = 1049 },
+//     .{ .name = "bracketed_paste", .value = 2004 },
+//     .{ .name = "synchronized_output", .value = 2026 },
+//     .{ .name = "grapheme_cluster", .value = 2027 },
+//     .{ .name = "report_color_scheme", .value = 2031 },
+//     .{ .name = "in_band_size_reports", .value = 2048 },
+// };
 
 // TODO: find reasonable default size
-pub const APC_BUF_DEFAULT_SIZE = 4096;
+pub const VTERM_BUF_DEFAULT_SIZE = 4096;
 const Terminal = ghostty_vt.Terminal;
 pub const VTerm = struct {
     t: ghostty_vt.Terminal,
     rs: ghostty_vt.RenderState,
+    s: Stream,
     parser: ghostty_vt.Parser,
     outfunc: ?VTermOutputCallback,
     outdata: ?*anyopaque,
@@ -1775,12 +1832,15 @@ pub const VTerm = struct {
         primary: VTermKeyEncodingStack,
         alternate: VTermKeyEncodingStack,
     },
+    outbuffer: [VTERM_BUF_DEFAULT_SIZE]u8,
+    outbuffer_cur: usize,
+    tmpbuffer: [VTERM_BUF_DEFAULT_SIZE]u8,
     apc_buf: std.ArrayList(u8),
 
     const Self = @This();
     pub fn reset_apc_buf(self: *Self) void {
-        if (self.apc_buf.items.len > APC_BUF_DEFAULT_SIZE) {
-            self.apc_buf.shrinkAndFree(self.allocator, APC_BUF_DEFAULT_SIZE);
+        if (self.apc_buf.items.len > VTERM_BUF_DEFAULT_SIZE) {
+            self.apc_buf.shrinkAndFree(self.allocator, VTERM_BUF_DEFAULT_SIZE);
         }
         self.apc_buf.items.len = 0;
     }
@@ -1801,9 +1861,14 @@ pub export fn vtermz_new(rows: c_int, cols: c_int) callconv(.c) *VTerm {
     var vt = alloc.create(VTerm) catch preserve_exit(e_outofmem);
     vt.t = t;
     vt.rs = rs;
+
+    const handler = vterm_handler.Handler.init(&vt.t, alloc);
+    const stream = vterm_handler.Stream.init(handler);
+    vt.s = stream;
+
     vt.parser = ghostty_vt.Parser.init();
     vt.parser.osc_parser.alloc = vt.allocator;
-    vt.apc_buf = std.ArrayList(u8).initCapacity(alloc, APC_BUF_DEFAULT_SIZE) catch preserve_exit(e_outofmem);
+    vt.apc_buf = std.ArrayList(u8).initCapacity(alloc, VTERM_BUF_DEFAULT_SIZE) catch preserve_exit(e_outofmem);
     vt.allocator = alloc;
     return vt;
 }
@@ -1812,6 +1877,7 @@ pub export fn vtermz_new(rows: c_int, cols: c_int) callconv(.c) *VTerm {
 pub export fn vtermz_free(vt: *VTerm) callconv(.c) void {
     vt.t.deinit(vt.allocator);
     vt.rs.deinit(vt.allocator);
+    vt.s.deinit();
     vt.parser.deinit();
     vt.allocator.destroy(vt);
 }
@@ -1820,143 +1886,150 @@ pub export fn vtermz_free(vt: *VTerm) callconv(.c) void {
 // void vterm_keyboard_key(VTerm *vt, VTermKey key, VTermModifier mod)
 // size_t vterm_input_write(VTerm *vt, const char *bytes, size_t len)
 pub export fn vtermz_input_write(vt: *VTerm, bytes: [*]const u8, len: usize) callconv(.c) usize {
-    // const input = "\x1b]4;1;?\x1b\\";
-    var osc_last_terminator: ghostty_vt.osc.Terminator = .bel;
-    var last_action: ghostty_vt.Parser.Action = .apc_start;
-    // TODO: figure out a good tmp buffer size. We use this buffer so we can appendSlice
-    // rather than append one byte at a time.
-    const TMP_APC_BUF_LEN = 256;
-    var tmp_apc_buf: [TMP_APC_BUF_LEN]u8 = .{0} ** TMP_APC_BUF_LEN;
-    var tmp_apc_buf_len: usize = 0;
-    for (0..len) |i| {
-        const b = bytes[i];
-        // std.debug.print("parsing byte: {x}\n", .{b});
-        for (vt.parser.next(b)) |action| if (action) |a| {
-            switch (a) {
-                .print => |ch| {
-                    // std.debug.print("WAT: got ch {x}\n", .{ch});
-                    vt.t.print(ch) catch {};
-                    // _ = ch;
-                    // TODO: dunno what to do with error
-                    // vt.t.print(ch) catch continue;
-                    // std.debug.print("got ch: {}\n", .{ch});
-
-                },
-                .csi_dispatch => |csi| {
-                    // TODO: yeah, this will suck
-                    // std.debug.print("WAT: got csi dispatch\n", .{});
-                    _ = csi;
-                },
-                .apc_start => {
-                    // std.debug.print("WAT: got apc start\n", .{});
-                },
-                .apc_put => |ch| {
-                    tmp_apc_buf[tmp_apc_buf_len] = ch;
-                    tmp_apc_buf_len += 1;
-                    if (tmp_apc_buf_len == TMP_APC_BUF_LEN) {
-                        vt.apc_buf.appendSlice(
-                            vt.allocator,
-                            &tmp_apc_buf,
-                        ) catch preserve_exit(e_outofmem);
-                        tmp_apc_buf_len = 0;
-                    }
-                },
-                .apc_end => {
-                    vt.apc_buf.appendSlice(
-                        vt.allocator,
-                        tmp_apc_buf[0..tmp_apc_buf_len],
-                    ) catch preserve_exit(e_outofmem);
-                    // std.debug.print("got apc command: {s}\n", .{vt.apc_buf.items});
-                    // TODO: call callback for APC
-                    vt.reset_apc_buf();
-                },
-                .dcs_hook => {
-                    // std.debug.print("WAT: got dcs hook\n", .{});
-                },
-                .dcs_put => {
-                    // std.debug.print("WAT: got dcs put\n", .{});
-                },
-                .dcs_unhook => {
-                    // std.debug.print("WAT: got dcs unhook\n", .{});
-                },
-                .esc_dispatch => |esc| {
-                    // // When using the ST rather than BEL, osc_dispatch executes on \x1b, and
-                    // // when we parse the following \x5c, it generates an esc_dispatch with \x5c.
-                    // std.debug.print("esc dispatch intermed len: {}\n", .{esc.intermediates.len});
-                    // if (last_action == .osc_dispatch and osc_last_terminator == .st and esc.intermediates.len == 0 and esc.final == '\\') {
-                    //     std.debug.print("SKIPPING: got esc_dispatch: {f}\n", .{esc});
-                    //     continue;
-                    // }
-                    if (esc.intermediates.len == 0 and esc.final == '\\') continue;
-                    if (esc.intermediates.len == 0) switch (esc.final) {
-                        // TODO: get rid of duplication with the .execute branch.
-                        'D' => vt.t.cursorDown(1),
-                        'E' => {
-                            vt.t.carriageReturn();
-                            vt.t.linefeed() catch {};
-                        },
-                        'H' => vt.t.tabSet(),
-                        else => {
-                            // std.debug.print("unimplemented esc.final: {x}", .{esc.final});
-                        },
-                    } else {
-                        // Ignore charset stuff for now.
-                        // const slot: ghostty_vt.CharsetSlot = switch (esc.intermediates[0]) {
-                        //     '(' => .G0,
-                        //     ')' => .G1,
-                        //     '*' => .G2,
-                        //     '+' => .G3,
-                        //     // TODO: buffer and rendering controls, ANSI conformance levels?
-                        //     else => @panic("unimplemented intermediate"),
-                        // };
-                        // switch (esc.final) {
-                        //     'B' => vt.t.configureCharset(slot, .ascii),
-                        //     '0' => vt.t.configureCharset(slot, .dec_special),
-                        //     'A' => vt.t.configureCharset(slot, .british),
-                        //     else => @panic("unimplemented charset"),
-                        // }
-                    }
-                },
-                .execute => |exe| {
-                    // C0 or C1 function
-                    // TODO: change slot controls with vt.t.invokeCharset. i.e. SI and SO controls.
-                    switch (exe) {
-                        0x07 => {}, // TODO: BEL
-                        0x08 => vt.t.backspace(),
-                        0x09 => vt.t.horizontalTab() catch {},
-                        0x0A => vt.t.linefeed() catch {},
-                        0x0D => vt.t.carriageReturn(),
-                        0x84 => vt.t.cursorDown(1), // ESC D (IND/index)
-                        0x85 => { // ESC E (NEL/next line/CRLF)
-                            vt.t.carriageReturn();
-                            // TODO: do anything with error?
-                            vt.t.linefeed() catch {};
-                        },
-                        0x88 => vt.t.tabSet(), // ESC H (HTS/set horizontal tab stop)
-                        else => {},
-                        // 0x90 => @panic("C1 dcs inducer"),
-                        // 0x9B => @panic("C1 execute csi"),
-                        // 0x9D => @panic("C1 execute osc command"),
-                        // 0x9C => @panic("C1 ST"),
-                        // else => @panic("unimplemented C0 or C1"),
-                    }
-                },
-                .osc_dispatch => |osc| {
-                    _ = osc;
-                    osc_last_terminator = if (b == '\x1b') .st else .bel;
-                    // std.debug.print("last byte: {x}, osc last terminator: {any}\n", .{ b, osc_last_terminator });
-                    // if (osc.color_operation.terminator)
-                    // std.debug.print("osc: {}\n", .{osc});
-                },
-            }
-            last_action = a;
-            // std.debug.print("last action now: {any}\n", .{last_action});
-        };
-    }
+    // TODO: handle errors
+    vt.s.nextSlice(bytes[0..len]) catch {};
     return 0;
+    // const input = "\x1b]4;1;?\x1b\\";
+    // var osc_last_terminator: ghostty_vt.osc.Terminator = .bel;
+    // var last_action: ghostty_vt.Parser.Action = .apc_start;
+    // // TODO: figure out a good tmp buffer size. We use this buffer so we can appendSlice
+    // // rather than append one byte at a time.
+    // const TMP_APC_BUF_LEN = 256;
+    // var tmp_apc_buf: [TMP_APC_BUF_LEN]u8 = .{0} ** TMP_APC_BUF_LEN;
+    // var tmp_apc_buf_len: usize = 0;
+    // for (0..len) |i| {
+    //     const b = bytes[i];
+    //     // std.debug.print("parsing byte: {x}\n", .{b});
+    //     for (vt.parser.next(b)) |action| if (action) |a| {
+    //         switch (a) {
+    //             .print => |ch| {
+    //                 // std.debug.print("WAT: got ch {x}\n", .{ch});
+    //                 vt.t.print(ch) catch {};
+    //                 // _ = ch;
+    //                 // TODO: dunno what to do with error
+    //                 // vt.t.print(ch) catch continue;
+    //                 // std.debug.print("got ch: {}\n", .{ch});
+    //
+    //             },
+    //             .csi_dispatch => |csi| {
+    //                 // TODO: yeah, this will suck
+    //                 // std.debug.print("WAT: got csi dispatch\n", .{});
+    //                 _ = csi;
+    //             },
+    //             .apc_start => {
+    //                 // std.debug.print("WAT: got apc start\n", .{});
+    //             },
+    //             .apc_put => |ch| {
+    //                 tmp_apc_buf[tmp_apc_buf_len] = ch;
+    //                 tmp_apc_buf_len += 1;
+    //                 if (tmp_apc_buf_len == TMP_APC_BUF_LEN) {
+    //                     vt.apc_buf.appendSlice(
+    //                         vt.allocator,
+    //                         &tmp_apc_buf,
+    //                     ) catch preserve_exit(e_outofmem);
+    //                     tmp_apc_buf_len = 0;
+    //                 }
+    //             },
+    //             .apc_end => {
+    //                 vt.apc_buf.appendSlice(
+    //                     vt.allocator,
+    //                     tmp_apc_buf[0..tmp_apc_buf_len],
+    //                 ) catch preserve_exit(e_outofmem);
+    //                 // std.debug.print("got apc command: {s}\n", .{vt.apc_buf.items});
+    //                 // TODO: call callback for APC
+    //                 vt.reset_apc_buf();
+    //             },
+    //             .dcs_hook => {
+    //                 // std.debug.print("WAT: got dcs hook\n", .{});
+    //             },
+    //             .dcs_put => {
+    //                 // std.debug.print("WAT: got dcs put\n", .{});
+    //             },
+    //             .dcs_unhook => {
+    //                 // std.debug.print("WAT: got dcs unhook\n", .{});
+    //             },
+    //             .esc_dispatch => |esc| {
+    //                 // // When using the ST rather than BEL, osc_dispatch executes on \x1b, and
+    //                 // // when we parse the following \x5c, it generates an esc_dispatch with \x5c.
+    //                 // std.debug.print("esc dispatch intermed len: {}\n", .{esc.intermediates.len});
+    //                 // if (last_action == .osc_dispatch and osc_last_terminator == .st and esc.intermediates.len == 0 and esc.final == '\\') {
+    //                 //     std.debug.print("SKIPPING: got esc_dispatch: {f}\n", .{esc});
+    //                 //     continue;
+    //                 // }
+    //                 if (esc.intermediates.len == 0 and esc.final == '\\') continue;
+    //                 if (esc.intermediates.len == 0) switch (esc.final) {
+    //                     // TODO: get rid of duplication with the .execute branch.
+    //                     'D' => vt.t.cursorDown(1),
+    //                     'E' => {
+    //                         vt.t.carriageReturn();
+    //                         vt.t.linefeed() catch {};
+    //                     },
+    //                     'H' => vt.t.tabSet(),
+    //                     else => {
+    //                         // std.debug.print("unimplemented esc.final: {x}", .{esc.final});
+    //                     },
+    //                 } else {
+    //                     // Ignore charset stuff for now.
+    //                     // const slot: ghostty_vt.CharsetSlot = switch (esc.intermediates[0]) {
+    //                     //     '(' => .G0,
+    //                     //     ')' => .G1,
+    //                     //     '*' => .G2,
+    //                     //     '+' => .G3,
+    //                     //     // TODO: buffer and rendering controls, ANSI conformance levels?
+    //                     //     else => @panic("unimplemented intermediate"),
+    //                     // };
+    //                     // switch (esc.final) {
+    //                     //     'B' => vt.t.configureCharset(slot, .ascii),
+    //                     //     '0' => vt.t.configureCharset(slot, .dec_special),
+    //                     //     'A' => vt.t.configureCharset(slot, .british),
+    //                     //     else => @panic("unimplemented charset"),
+    //                     // }
+    //                 }
+    //             },
+    //             .execute => |exe| {
+    //                 // C0 or C1 function
+    //                 // TODO: change slot controls with vt.t.invokeCharset. i.e. SI and SO controls.
+    //                 switch (exe) {
+    //                     0x07 => {}, // TODO: BEL
+    //                     0x08 => vt.t.backspace(),
+    //                     0x09 => vt.t.horizontalTab() catch {},
+    //                     0x0A => vt.t.linefeed() catch {},
+    //                     0x0D => vt.t.carriageReturn(),
+    //                     0x84 => vt.t.cursorDown(1), // ESC D (IND/index)
+    //                     0x85 => { // ESC E (NEL/next line/CRLF)
+    //                         vt.t.carriageReturn();
+    //                         // TODO: do anything with error?
+    //                         vt.t.linefeed() catch {};
+    //                     },
+    //                     0x88 => vt.t.tabSet(), // ESC H (HTS/set horizontal tab stop)
+    //                     else => {},
+    //                     // 0x90 => @panic("C1 dcs inducer"),
+    //                     // 0x9B => @panic("C1 execute csi"),
+    //                     // 0x9D => @panic("C1 execute osc command"),
+    //                     // 0x9C => @panic("C1 ST"),
+    //                     // else => @panic("unimplemented C0 or C1"),
+    //                 }
+    //             },
+    //             .osc_dispatch => |osc| {
+    //                 _ = osc;
+    //                 osc_last_terminator = if (b == '\x1b') .st else .bel;
+    //                 // std.debug.print("last byte: {x}, osc last terminator: {any}\n", .{ b, osc_last_terminator });
+    //                 // if (osc.color_operation.terminator)
+    //                 // std.debug.print("osc: {}\n", .{osc});
+    //             },
+    //         }
+    //         last_action = a;
+    //         // std.debug.print("last action now: {any}\n", .{last_action});
+    //     };
+    // }
+    // return 0;
 }
 
 // DONE
+// pub export fn vterm_output_set_callback(vt: *VTerm, func: VTermOutputCallback, user: *anyopaque) callconv(.c) void {
+//     vt.outfunc = func;
+//     vt.outdata = user;
+// }
 pub export fn vtermz_output_set_callback(
     vt: *VTerm,
     func: VTermOutputCallback,
@@ -1965,6 +2038,153 @@ pub export fn vtermz_output_set_callback(
     vt.outfunc = func;
     vt.outdata = user;
 }
+
+// void vterm_push_output_bytes(VTerm *vt, const char *bytes, size_t len)
+// {
+//   if (vt->outfunc) {
+//     (vt->outfunc)(bytes, len, vt->outdata);
+//     return;
+//   }
+//
+//   if (len > vt->outbuffer_len - vt->outbuffer_cur) {
+//     return;
+//   }
+//
+//   memcpy(vt->outbuffer + vt->outbuffer_cur, bytes, len);
+//   vt->outbuffer_cur += len;
+// }
+pub fn vtermz_push_output_bytes(vt: *VTerm, bytes: []const u8, len: usize) void {
+    //   if (vt->outfunc) {
+    //     (vt->outfunc)(bytes, len, vt->outdata);
+    //     return;
+    //   }
+    if (vt.outfunc) |outfunc| {
+        outfunc(bytes.ptr, len, vt.outdata);
+        return;
+    }
+
+    //   if (len > vt->outbuffer_len - vt->outbuffer_cur) {
+    //     return;
+    //   }
+    if (len > vt.outbuffer.len - vt.outbuffer_cur) {
+        return;
+    }
+    // memcpy(vt->outbuffer + vt->outbuffer_cur, bytes, len);
+    @memcpy(vt.outbuffer[vt.outbuffer_cur .. vt.outbuffer_cur + len], bytes[0..len]);
+    //   vt->outbuffer_cur += len;
+    vt.outbuffer_cur += len;
+}
+
+// void vterm_push_output_sprintf(VTerm *vt, const char *format, ...)
+//   FUNC_ATTR_PRINTF(2, 3)
+// {
+//   va_list args;
+//   va_start(args, format);
+//   size_t len = (size_t)vsnprintf(vt->tmpbuffer, vt->tmpbuffer_len, format, args);
+//   vterm_push_output_bytes(vt, vt->tmpbuffer, len);
+//   va_end(args);
+// }
+pub fn vtermz_push_output_sprintf(vt: *VTerm, comptime format: []const u8, args: anytype) void {
+    // TODO: handle failure, but this should probably never fail.
+    const buf = std.fmt.bufPrint(&vt.tmpbuffer, format, args) catch return;
+    vtermz_push_output_bytes(vt, buf, buf.len);
+}
+
+// void vterm_push_output_sprintf_ctrl(VTerm *vt, uint8_t ctrl, const char *fmt, ...)
+//   FUNC_ATTR_PRINTF(3, 4)
+// {
+//   size_t cur;
+//
+//   if (ctrl >= 0x80 && !vt->mode.ctrl8bit) {
+//     cur = (size_t)snprintf(vt->tmpbuffer, vt->tmpbuffer_len, ESC_S "%c", ctrl - 0x40);
+//   } else {
+//     cur = (size_t)snprintf(vt->tmpbuffer, vt->tmpbuffer_len, "%c", ctrl);
+//   }
+//
+//   if (cur >= vt->tmpbuffer_len) {
+//     return;
+//   }
+//
+//   va_list args;
+//   va_start(args, fmt);
+//   cur += (size_t)vsnprintf(vt->tmpbuffer + cur, vt->tmpbuffer_len - cur, fmt, args);
+//   va_end(args);
+//
+//   if (cur >= vt->tmpbuffer_len) {
+//     return;
+//   }
+//
+//   vterm_push_output_bytes(vt, vt->tmpbuffer, cur);
+// }
+// fn vterm_push_output_sprintf_ctrl(vt: *VTerm, ctrl: u8, fmt: []const u8, args: anytype) void {
+//     //   size_t cur;
+//     //
+//     //   if (ctrl >= 0x80 && !vt->mode.ctrl8bit) {
+//     //     cur = (size_t)snprintf(vt->tmpbuffer, vt->tmpbuffer_len, ESC_S "%c", ctrl - 0x40);
+//     //   } else {
+//     //     cur = (size_t)snprintf(vt->tmpbuffer, vt->tmpbuffer_len, "%c", ctrl);
+//     //   }
+//     //
+//     //   if (cur >= vt->tmpbuffer_len) {
+//     //     return;
+//     //   }
+//     // vt.t.modes.get()
+//     // if (ctrl >= 0x80 and !vt.t.)
+//     //
+//     //   va_list args;
+//     //   va_start(args, fmt);
+//     //   cur += (size_t)vsnprintf(vt->tmpbuffer + cur, vt->tmpbuffer_len - cur, fmt, args);
+//     //   va_end(args);
+//     //
+//     //   if (cur >= vt->tmpbuffer_len) {
+//     //     return;
+//     //   }
+//     //
+//     //   vterm_push_output_bytes(vt, vt->tmpbuffer, cur);
+//     // var s = vt.t.vtStream();
+//     var s = try ghostty_vt.Stream(u8).initAlloc(vt.allocator7);
+//     // vt.t.vtHandler()
+//     s.next();
+// }
+
+//
+// void vterm_push_output_sprintf_str(VTerm *vt, uint8_t ctrl, bool term, const char *fmt, ...)
+//   FUNC_ATTR_PRINTF(4, 5)
+// {
+//   size_t cur = 0;
+//
+//   if (ctrl) {
+//     if (ctrl >= 0x80 && !vt->mode.ctrl8bit) {
+//       cur = (size_t)snprintf(vt->tmpbuffer, vt->tmpbuffer_len, ESC_S "%c", ctrl - 0x40);
+//     } else {
+//       cur = (size_t)snprintf(vt->tmpbuffer, vt->tmpbuffer_len, "%c", ctrl);
+//     }
+//
+//     if (cur >= vt->tmpbuffer_len) {
+//       return;
+//     }
+//   }
+//
+//   va_list args;
+//   va_start(args, fmt);
+//   cur += (size_t)vsnprintf(vt->tmpbuffer + cur, vt->tmpbuffer_len - cur, fmt, args);
+//   va_end(args);
+//
+//   if (cur >= vt->tmpbuffer_len) {
+//     return;
+//   }
+//
+//   if (term) {
+//     cur += (size_t)snprintf(vt->tmpbuffer + cur, vt->tmpbuffer_len - cur,
+//                             vt->mode.ctrl8bit ? "\x9C" : ESC_S "\\");  // ST
+//
+//     if (cur >= vt->tmpbuffer_len) {
+//       return;
+//     }
+//   }
+//
+//   vterm_push_output_bytes(vt, vt->tmpbuffer, cur);
+// }
 
 // static VTermKeyEncodingFlags vterm_state_get_key_encoding_flags(const VTermState *state)
 // {
@@ -1983,6 +2203,7 @@ pub fn vtermz_state_get_key_encoding_flags(vt: *const VTerm) VTermKeyEncodingFla
 }
 
 pub export fn vtermz_keyboard_key(vt: *VTerm, key: VTermKey, mod: VTermModifier) callconv(.c) void {
+    // vt.s.
     if (key == .none) {
         return;
     }
@@ -2071,10 +2292,10 @@ pub export fn vtermz_keyboard_key(vt: *VTerm, key: VTermKey, mod: VTermModifier)
         //   }
         //   break;
         .enter => {
-            // TODO:
+            // TODO: make sure this is the same
             // if (vt.state->mode.newline) {
-            if (false) {
-                // vterm_push_output_sprintf(vt, "\r\n");
+            if (vt.t.modes.get(.linefeed)) {
+                vtermz_push_output_sprintf(vt, "\r\n", .{});
             } else {
                 continue :sw .literal;
             }
@@ -2453,127 +2674,6 @@ pub export fn vtermz_state_set_palette_color(vt: *VTerm, index: c_int, col: *con
 // // 1913:    vterm_mouse_button(term->vt, button, pressed, mod);
 // // 2081:    vterm_screen_get_cell(term->vts, (VTermPos){ .row = row, .col = col },
 
-//
-// pub export fn vterm_output_set_callback(vt: *VTerm, func: VTermOutputCallback, user: *anyopaque) callconv(.c) void {
-//     vt.outfunc = func;
-//     vt.outdata = user;
-// }
-//
-// pub export fn vterm_main_thing() void {
-//     // Use a debug allocator so we get leak checking. You probably want
-//     // to replace this for release builds.
-//     var gpa: std.heap.DebugAllocator(.{}) = .init;
-//     defer _ = gpa.deinit();
-//     const alloc = gpa.allocator();
-//
-//     // Initialize a terminal.
-//     var t: ghostty_vt.Terminal = ghostty_vt.Terminal.init(alloc, .{
-//         .cols = 6,
-//         .rows = 40,
-//     }) catch return;
-//     defer t.deinit(alloc);
-//
-//     // Write some text. It'll wrap because this is too long for our
-//     // columns size above (6).
-//     t.printString("Hello, World!") catch return;
-//
-//     // Get the plain string view of the terminal screen.
-//     const str = t.plainString(alloc) catch return;
-//     defer alloc.free(str);
-//     std.debug.print("{s}\n", .{str});
-// }
-
-//
-// void vterm_push_output_bytes(VTerm *vt, const char *bytes, size_t len)
-// {
-//   if (vt->outfunc) {
-//     (vt->outfunc)(bytes, len, vt->outdata);
-//     return;
-//   }
-//
-//   if (len > vt->outbuffer_len - vt->outbuffer_cur) {
-//     return;
-//   }
-//
-//   memcpy(vt->outbuffer + vt->outbuffer_cur, bytes, len);
-//   vt->outbuffer_cur += len;
-// }
-//
-// void vterm_push_output_sprintf(VTerm *vt, const char *format, ...)
-//   FUNC_ATTR_PRINTF(2, 3)
-// {
-//   va_list args;
-//   va_start(args, format);
-//   size_t len = (size_t)vsnprintf(vt->tmpbuffer, vt->tmpbuffer_len, format, args);
-//   vterm_push_output_bytes(vt, vt->tmpbuffer, len);
-//   va_end(args);
-// }
-//
-// void vterm_push_output_sprintf_ctrl(VTerm *vt, uint8_t ctrl, const char *fmt, ...)
-//   FUNC_ATTR_PRINTF(3, 4)
-// {
-//   size_t cur;
-//
-//   if (ctrl >= 0x80 && !vt->mode.ctrl8bit) {
-//     cur = (size_t)snprintf(vt->tmpbuffer, vt->tmpbuffer_len, ESC_S "%c", ctrl - 0x40);
-//   } else {
-//     cur = (size_t)snprintf(vt->tmpbuffer, vt->tmpbuffer_len, "%c", ctrl);
-//   }
-//
-//   if (cur >= vt->tmpbuffer_len) {
-//     return;
-//   }
-//
-//   va_list args;
-//   va_start(args, fmt);
-//   cur += (size_t)vsnprintf(vt->tmpbuffer + cur, vt->tmpbuffer_len - cur, fmt, args);
-//   va_end(args);
-//
-//   if (cur >= vt->tmpbuffer_len) {
-//     return;
-//   }
-//
-//   vterm_push_output_bytes(vt, vt->tmpbuffer, cur);
-// }
-//
-// void vterm_push_output_sprintf_str(VTerm *vt, uint8_t ctrl, bool term, const char *fmt, ...)
-//   FUNC_ATTR_PRINTF(4, 5)
-// {
-//   size_t cur = 0;
-//
-//   if (ctrl) {
-//     if (ctrl >= 0x80 && !vt->mode.ctrl8bit) {
-//       cur = (size_t)snprintf(vt->tmpbuffer, vt->tmpbuffer_len, ESC_S "%c", ctrl - 0x40);
-//     } else {
-//       cur = (size_t)snprintf(vt->tmpbuffer, vt->tmpbuffer_len, "%c", ctrl);
-//     }
-//
-//     if (cur >= vt->tmpbuffer_len) {
-//       return;
-//     }
-//   }
-//
-//   va_list args;
-//   va_start(args, fmt);
-//   cur += (size_t)vsnprintf(vt->tmpbuffer + cur, vt->tmpbuffer_len - cur, fmt, args);
-//   va_end(args);
-//
-//   if (cur >= vt->tmpbuffer_len) {
-//     return;
-//   }
-//
-//   if (term) {
-//     cur += (size_t)snprintf(vt->tmpbuffer + cur, vt->tmpbuffer_len - cur,
-//                             vt->mode.ctrl8bit ? "\x9C" : ESC_S "\\");  // ST
-//
-//     if (cur >= vt->tmpbuffer_len) {
-//       return;
-//     }
-//   }
-//
-//   vterm_push_output_bytes(vt, vt->tmpbuffer, cur);
-// }
-//
 // VTermValueType vterm_get_attr_type(VTermAttr attr)
 // {
 //   switch (attr) {
