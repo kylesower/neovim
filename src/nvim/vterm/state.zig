@@ -141,22 +141,22 @@
 //   }
 //   vterm_allocator_free(state->vt, state);
 // }
-const vterm = @import("vterm.zig");
-const VTermScreen = vterm.VTermScreen;
-const BUFIDX_PRIMARY = vterm.BUFIDX_PRIMARY;
-const BUFIDX_ALTSCREEN = vterm.BUFIDX_ALTSCREEN;
-const vterm_allocator_free = vterm.vterm_allocator_free;
-const VTermState = vterm.VTermState;
-pub export fn vterm_state_free(state: *VTermState) callconv(.c) void {
-    vterm_allocator_free(state.vt, state.tabstops);
-    if (state.lineinfos[BUFIDX_PRIMARY]) |lineinfo| {
-      vterm_allocator_free(state.vt, lineinfo);
-    }
-    if (state.lineinfos[BUFIDX_ALTSCREEN]) |lineinfo| {
-        vterm_allocator_free(state.vt, lineinfo);
-    }
-    vterm_allocator_free(state.vt, state);
-}
+// const vterm = @import("vterm.zig");
+// const VTermScreen = vterm.VTermScreen;
+// const BUFIDX_PRIMARY = vterm.BUFIDX_PRIMARY;
+// const BUFIDX_ALTSCREEN = vterm.BUFIDX_ALTSCREEN;
+// const vterm_allocator_free = vterm.vterm_allocator_free;
+// const VTermState = vterm.VTermState;
+// pub export fn vterm_state_free(state: *VTermState) callconv(.c) void {
+//     vterm_allocator_free(state.vt, state.tabstops);
+//     if (state.lineinfos[BUFIDX_PRIMARY]) |lineinfo| {
+//       vterm_allocator_free(state.vt, lineinfo);
+//     }
+//     if (state.lineinfos[BUFIDX_ALTSCREEN]) |lineinfo| {
+//         vterm_allocator_free(state.vt, lineinfo);
+//     }
+//     vterm_allocator_free(state.vt, state);
+// }
 
 //
 // static void scroll(VTermState *state, VTermRect rect, int downward, int rightward)

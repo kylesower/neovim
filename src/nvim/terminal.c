@@ -476,6 +476,7 @@ void terminal_open(Terminal **termpp, buf_T *buf, TerminalOptions opts)
   vterm_screen_set_damage_merge(term->vts, VTERM_DAMAGE_SCROLL);
   vterm_screen_reset(term->vts, 1);
   vterm_output_set_callback(term->vt, term_output_callback, term);
+  vtermz_output_set_callback(term->vtz, term_output_callback, term);
 
   term->selection_buffer = xcalloc(SELECTIONBUF_SIZE, 1);
   vterm_state_set_selection_callbacks(state, &vterm_selection_callbacks, term,
@@ -1176,6 +1177,7 @@ static void terminal_send_key(Terminal *term, int c)
 
   if (key != VTERM_KEY_NONE) {
     vterm_keyboard_key(term->vt, key, mod);
+    vtermz_keyboard_key(term->vtz, key, mod);
   } else if (!IS_SPECIAL(c)) {
     vterm_keyboard_unichar(term->vt, (uint32_t)c, mod);
   }
