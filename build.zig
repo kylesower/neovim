@@ -306,7 +306,7 @@ pub fn build(b: *std.Build) !void {
         .name = "terminal",
         .linkage = .static,
         .root_module = b.createModule(.{
-            .root_source_file = b.path("src/nvim/terminal.zig"),
+            .root_source_file = b.path("src/nvim/vterm/vterm.zig"),
             .target = target,
             .optimize = optimize,
         }),
