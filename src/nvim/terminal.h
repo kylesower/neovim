@@ -6,6 +6,7 @@
 
 #include "nvim/api/private/defs.h"  // IWYU pragma: keep
 #include "nvim/types_defs.h"  // IWYU pragma: keep
+#include "nvim/vterm/vterm_defs.h"
 
 typedef void (*terminal_write_cb)(const char *buffer, size_t size, void *data);
 typedef void (*terminal_resize_cb)(uint16_t width, uint16_t height, void *data);
@@ -27,3 +28,7 @@ VTermZ *vtermz_new(int rows, int cols);
 void vtermz_free(VTermZ *vt);
 void vtermz_print(VTermZ *vt);
 size_t vtermz_input_write(VTermZ *vt, const char *bytes, size_t len);
+void vtermz_set_utf8(VTermZ *vt, bool is_utf8);
+void vtermz_get_size(const VTermZ *vt, int *rowsp, int *colsp);
+void vtermz_set_size(VTermZ *vt, int rows, int cols);
+void vtermz_state_set_palette_color(VTermZ *vt, int index, const VTermColor *col);

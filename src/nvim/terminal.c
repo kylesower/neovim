@@ -463,6 +463,7 @@ void terminal_open(Terminal **termpp, buf_T *buf, TerminalOptions opts)
   term->vt = vterm_new(opts.height, opts.width);
   term->vtz = vtermz_new(opts.height, opts.width);
   vterm_set_utf8(term->vt, 1);
+  vtermz_set_utf8(term->vtz, true);
   // Setup state
   VTermState *state = vterm_obtain_state(term->vt);
   // Set up screen
@@ -567,6 +568,7 @@ void terminal_open(Terminal **termpp, buf_T *buf, TerminalOptions opts)
                         (uint8_t)((color_val >> 8) & 0xFF),
                         (uint8_t)((color_val >> 0) & 0xFF));
         vterm_state_set_palette_color(state, i, &color);
+        vtermz_state_set_palette_color(term->vtz, i, &color);
         term->color_set[i] = true;
       }
     }
@@ -662,6 +664,7 @@ void terminal_check_size(Terminal *term)
 
   int curwidth, curheight;
   vterm_get_size(term->vt, &curheight, &curwidth);
+  vtermz_get_size(term->vtz, &curheight, &curwidth);
   uint16_t width = 0;
   uint16_t height = 0;
 
@@ -686,6 +689,7 @@ void terminal_check_size(Terminal *term)
   }
 
   vterm_set_size(term->vt, height, width);
+  vtermz_set_size(term->vtz, height, width);
   vterm_screen_flush_damage(term->vts);
   term->pending.resize = true;
   invalidate_terminal(term, -1, -1);
@@ -1229,6 +1233,7 @@ void terminal_get_line_attributes(Terminal *term, win_T *wp, int linenr, int *te
 {
   int height, width;
   vterm_get_size(term->vt, &height, &width);
+  vtermz_get_size(term->vtz, &height, &width);
   VTermState *state = vterm_obtain_state(term->vt);
   assert(linenr);
   int row = linenr_to_row(term, linenr);
@@ -2202,7 +2207,7 @@ static void refresh_size(Terminal *term, buf_T *buf)
 
   term->pending.resize = false;
   int width, height;
-  vterm_get_size(term->vt, &height, &width);
+  vtermz_get_size(term->vtz, &height, &width);
   term->invalid_start = 0;
   term->invalid_end = height;
   term->opts.resize_cb((uint16_t)width, (uint16_t)height, term->opts.data);
@@ -2260,6 +2265,7 @@ static void refresh_scrollback(Terminal *term, buf_T *buf)
 
   int width, height;
   vterm_get_size(term->vt, &height, &width);
+  vtermz_get_size(term->vtz, &height, &width);
 
   // May still have pending scrollback after increase in terminal height if the
   // scrollback wasn't refreshed in time; append these to the top of the buffer.
@@ -2308,6 +2314,7 @@ static void refresh_screen(Terminal *term, buf_T *buf)
   int height;
   int width;
   vterm_get_size(term->vt, &height, &width);
+  vtermz_get_size(term->vtz, &height, &width);
   // Terminal height may have decreased before `invalid_end` reflects it.
   term->invalid_end = MIN(term->invalid_end, height);
 
