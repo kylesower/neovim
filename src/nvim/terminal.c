@@ -145,6 +145,7 @@ typedef struct {
 struct terminal {
   TerminalOptions opts;  // options passed to terminal_open
   VTerm *vt;
+  VTermZ *vtz;
   VTermScreen *vts;
   // buffer used to:
   //  - convert VTermScreen cell arrays into utf8 strings
@@ -460,6 +461,7 @@ void terminal_open(Terminal **termpp, buf_T *buf, TerminalOptions opts)
   buf->terminal = term;
   // Create VTerm
   term->vt = vterm_new(opts.height, opts.width);
+  term->vtz = vtermz_new(opts.height, opts.width);
   vterm_set_utf8(term->vt, 1);
   // Setup state
   VTermState *state = vterm_obtain_state(term->vt);
@@ -1064,6 +1066,7 @@ void terminal_destroy(Terminal **termpp)
     kv_destroy(term->selection);
     kv_destroy(term->termrequest_buffer);
     vterm_free(term->vt);
+    vtermz_free(term->vtz);
     multiqueue_free(term->pending.events);
     xfree(term);
     *termpp = NULL;  // coverity[dead-store]
@@ -1191,9 +1194,11 @@ void terminal_receive(Terminal *term, const char *data, size_t len)
     }
 
     vterm_input_write(term->vt, crlf_data.items, kv_size(crlf_data));
+    vtermz_input_write(term->vtz, crlf_data.items, kv_size(crlf_data));
     kv_destroy(crlf_data);
   } else {
     vterm_input_write(term->vt, data, len);
+    vtermz_input_write(term->vtz, data, len);
   }
   vterm_screen_flush_damage(term->vts);
 }

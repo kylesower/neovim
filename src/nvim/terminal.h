@@ -21,3 +21,9 @@ typedef struct {
 } TerminalOptions;
 
 #include "terminal.h.generated.h"
+
+typedef struct VTermZ VTermZ;
+VTermZ *vtermz_new(int rows, int cols);
+void vtermz_free(VTermZ *vt);
+void vtermz_print(VTermZ *vt);
+size_t vtermz_input_write(VTermZ *vt, const char *bytes, size_t len);
