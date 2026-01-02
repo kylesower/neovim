@@ -21,6 +21,7 @@ const c = @cImport({
     @cInclude("string.h");
     @cInclude("auto/config.h");
     @cInclude("nvim/main.h");
+    @cInclude("nvim/grid.h");
     @cInclude("nvim/memory.h");
     @cInclude("nvim/errors.h");
     @cInclude("nvim/vterm/screen.h");
@@ -1861,6 +1862,30 @@ pub export fn vtermz_new(rows: c_int, cols: c_int) callconv(.c) *VTerm {
     t.* = ghostty_vt.Terminal.init(alloc, .{
         .rows = @intCast(rows),
         .cols = @intCast(cols),
+        .colors = .{
+            .foreground = .init(
+                .{
+                    .r = 0xfa,
+                    .g = 0xfa,
+                    .b = 0xfa,
+                },
+            ),
+            .background = .init(
+                .{
+                    .r = 0x10,
+                    .g = 0x10,
+                    .b = 0x10,
+                },
+            ),
+            .cursor = .init(
+                .{
+                    .r = 0xfa,
+                    .g = 0xfa,
+                    .b = 0xfa,
+                },
+            ),
+            .palette = .default,
+        },
     }) catch preserve_exit(e_outofmem);
 
     const rs: ghostty_vt.RenderState = .empty;
@@ -1874,36 +1899,6 @@ pub export fn vtermz_new(rows: c_int, cols: c_int) callconv(.c) *VTerm {
     vt.s = stream;
     vt.keyout_buffer_w = std.Io.Writer.fixed(&vt.keyout_buffer);
     vt.allocator = alloc;
-    // colors taken from pen.c, but the ghostty defaults look better
-    // vterm_color_rgb(&state->default_fg, 240, 240, 240);
-    // vterm_color_rgb(&state->default_bg, 0, 0, 0);
-    // vt.t.setAttribute(.{ .direct_color_fg = .{ .r = 240, .g = 240, .b = 240 } }) catch {};
-    // vt.t.setAttribute(.{ .direct_color_bg = .{ .r = 0, .g = 0, .b = 0 } }) catch {};
-    // const palette_colors: [16][3]u8 = .{
-    //     // R    G    B
-    //     .{ 0, 0, 0 }, // black
-    //     .{ 224, 0, 0 }, // red
-    //     .{ 0, 224, 0 }, // green
-    //     .{ 224, 224, 0 }, // yellow
-    //     .{ 0, 0, 224 }, // blue
-    //     .{ 224, 0, 224 }, // magenta
-    //     .{ 0, 224, 224 }, // cyan
-    //     .{ 224, 224, 224 }, // white == light grey
-    //
-    //     // high intensity
-    //     .{ 128, 128, 128 }, // black
-    //     .{ 255, 64, 64 }, // red
-    //     .{ 64, 255, 64 }, // green
-    //     .{ 255, 255, 64 }, // yellow
-    //     .{ 64, 64, 255 }, // blue
-    //     .{ 255, 64, 255 }, // magenta
-    //     .{ 64, 255, 255 }, // cyan
-    //     .{ 255, 255, 255 }, // white for real
-    // };
-    // for (palette_colors, 0..) |col, idx| {
-    //     vt.t.colors.palette.set(@intCast(idx), .{ .r = col[0], .g = col[1], .b = col[2] });
-    // }
-    // schar = schar_from_buf();
     return vt;
 }
 
@@ -2343,11 +2338,32 @@ pub export fn vtermz_screen_get_cell(vt: *VTerm, pos: VTermPos, ret: *anyopaque)
 
     //   cell->schar = (intcell->schar == (uint32_t)-1) ? 0 : intcell->schar;
     switch (cell.raw.content_tag) {
-        .codepoint => vcell.schar = cell.raw.content.codepoint,
+        .codepoint => {
+            const codepoint = cell.raw.content.codepoint;
+            const len = std.unicode.utf8CodepointSequenceLength(codepoint) catch |err| switch (err) {
+                error.CodepointTooLarge => return 0,
+            };
+            if (len > 1) {
+                var buf: [4]u8 = undefined;
+                _ = std.unicode.utf8Encode(codepoint, &buf) catch return 0;
+                vcell.schar = std.mem.bytesToValue(u32, &buf);
+            } else {
+                vcell.schar = codepoint;
+            }
+        },
         .codepoint_grapheme => {
-            std.debug.print("ignoring grapheme\n", .{});
+            // TODO: grapheme clusters
+            // std.debug.print("ignoring grapheme\n", .{});
+            // c.schar_from_buf(&buf, len);
             vcell.schar = 0;
-        }, // TODO: no idea what to do here.
+            // var buf: [4]u8 = undefined;
+            // _ = std.unicode.utf8Encode(cell.grapheme[0], &buf) catch {};
+            // if (std.mem.eql(u8, "\xe2\x9d\xaf", buf[0..3])) {
+            //     std.debug.print("got my codepoint! {d}", .{cell.grapheme[0]});
+            //     @panic("all done");
+            // }
+            // vcell.schar = cell.grapheme[0];
+        },
         .bg_color_palette, .bg_color_rgb => {
             vcell.schar = 0;
         },
@@ -2392,7 +2408,7 @@ pub export fn vtermz_screen_get_cell(vt: *VTerm, pos: VTermPos, ret: *anyopaque)
 
     //   cell->fg = intcell->pen.fg;
     //   cell->bg = intcell->pen.bg;
-    const fg = cell_style.fg(.{ .default = .{}, .palette = &vt.rs.colors.palette, .bold = null });
+    const fg = cell_style.fg(.{ .default = vt.rs.colors.foreground, .palette = &vt.rs.colors.palette, .bold = null });
     const bg = cell_style.bg(&cell.raw, &vt.rs.colors.palette) orelse vt.rs.colors.background;
     vcell.fg = .{
         .rgb = .{

@@ -1177,7 +1177,8 @@ static void terminal_send_key(Terminal *term, int c)
   VTermKey key = convert_key(&c, &mod);
 
   if (key != VTERM_KEY_NONE) {
-    vterm_keyboard_key(term->vt, key, mod);
+    // TODO: choose between vterm or vtermz at comptime
+    // vterm_keyboard_key(term->vt, key, mod);
     vtermz_keyboard_key(term->vtz, key, mod);
   } else if (!IS_SPECIAL(c)) {
     vterm_keyboard_unichar(term->vt, (uint32_t)c, mod);
