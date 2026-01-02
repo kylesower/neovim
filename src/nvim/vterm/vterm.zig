@@ -14,12 +14,13 @@
 //
 // #define VTERM_VERSION_MAJOR 0
 // #define VTERM_VERSION_MINOR 3
-const c = @cImport({
+pub const c = @cImport({
     @cInclude("stdarg.h");
     @cInclude("stdio.h");
     @cInclude("stdlib.h");
     @cInclude("string.h");
     @cInclude("auto/config.h");
+    @cInclude("nvim/log.h");
     @cInclude("nvim/main.h");
     @cInclude("nvim/grid.h");
     @cInclude("nvim/memory.h");
@@ -30,10 +31,19 @@ const c = @cImport({
 });
 const std = @import("std");
 const ghostty_vt = @import("ghostty-vt");
+const log = @import("log.zig");
 const vterm_handler = @import("vterm_handler.zig");
 const Handler = vterm_handler.Handler;
 const Stream = vterm_handler.Stream;
-// TODO: set logFn to log to nvim log file
+
+pub const std_options: std.Options = .{
+    // Set the log level to debug. Since we log using the C logger, we let
+    // that do the log level filtering.
+    .log_level = .debug,
+
+    // Define logFn to override the std implementation
+    .logFn = log.log,
+};
 
 fn test_preserve_exit(e: [*c]const u8) noreturn {
     _ = e;
@@ -1815,7 +1825,6 @@ else
 // DONE
 pub export fn vtermz_new(rows: c_int, cols: c_int) callconv(.c) *VTerm {
     const alloc = gpa_alloc;
-
     const t = alloc.create(ghostty_vt.Terminal) catch preserve_exit(e_outofmem);
     t.* = ghostty_vt.Terminal.init(alloc, .{
         .rows = @intCast(rows),
@@ -2288,6 +2297,15 @@ pub export fn vtermz_screen_get_cell(vt: *VTerm, pos: VTermPos, ret: *anyopaque)
     const cell = cell_row.cells.get(@intCast(pos.col));
 
     const cell_style: ghostty_vt.Style = if (cell.raw.style_id != 0) cell.style else .{};
+    if (cell.raw.hyperlink) {
+        std.debug.print("got a hyperlink!", .{});
+        // var link_buf: [512]u8 = undefined;
+        // var idx: usize = 0;
+        // for (cell.grapheme) |g| {
+        //     idx += std.unicode.utf8Encode(g, link_buf[idx..]) catch return 0;
+        // }
+        // std.debug.print("hyperlink: {s}", .{link_buf});
+    }
 
     //   cell->schar = (intcell->schar == (uint32_t)-1) ? 0 : intcell->schar;
     switch (cell.raw.content_tag) {
@@ -2311,8 +2329,7 @@ pub export fn vtermz_screen_get_cell(vt: *VTerm, pos: VTermPos, ret: *anyopaque)
             var buf: [c.MAX_SCHAR_SIZE]u8 = undefined;
             var idx: usize = 0;
             for (cell.grapheme) |g| {
-                const len = std.unicode.utf8Encode(g, buf[idx..]) catch return 0;
-                idx += len;
+                idx += std.unicode.utf8Encode(g, buf[idx..]) catch return 0;
             }
             vcell.schar = c.schar_from_buf(&buf, idx);
         },
@@ -2355,7 +2372,7 @@ pub export fn vtermz_screen_get_cell(vt: *VTerm, pos: VTermPos, ret: *anyopaque)
     //   cell->attrs.small = intcell->pen.small;
     //   TODO: no idea what the deal is with baseline
     //   cell->attrs.baseline = intcell->pen.baseline;
-    //   TODO: not sure ghostty supports this
+    //   TODO: not sure what these double width things are
     //   cell->attrs.dwl = intcell->pen.dwl;
     //   cell->attrs.dhl = intcell->pen.dhl;
     vcell.attrs.dwl = false;
