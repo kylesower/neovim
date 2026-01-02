@@ -2265,9 +2265,18 @@ inline fn vterm_key_to_ghostty_key(vkey: VTermKey) ?ghostty_vt.input.Key {
     };
 }
 
-inline fn vterm_mod_to_ghostty_mod(mod: VTermModifier) ghostty_vt.input.KeyMods {
-    _ = mod;
-    return .{ .caps_lock = true };
+inline fn vterm_mod_to_ghostty_mod(vmod: VTermModifier) ghostty_vt.input.KeyMods {
+    var mod: ghostty_vt.input.KeyMods = .{};
+    if (vmod & VTERM_MOD_ALT > 0) {
+        mod.alt = true;
+    }
+    if (vmod & VTERM_MOD_CTRL > 0) {
+        mod.ctrl = true;
+    }
+    if (vmod & VTERM_MOD_SHIFT > 0) {
+        mod.shift = true;
+    }
+    return mod;
 }
 
 pub export fn vtermz_keyboard_key(vt: *VTerm, vkey: VTermKey, vmod: VTermModifier) callconv(.c) void {
