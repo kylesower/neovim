@@ -26,6 +26,7 @@ const c = @cImport({
     @cInclude("nvim/errors.h");
     @cInclude("nvim/vterm/screen.h");
     @cInclude("nvim/vterm/state.h");
+    @cInclude("nvim/vterm/vterm.h");
 });
 const std = @import("std");
 const ghostty_vt = @import("ghostty-vt");
@@ -1819,30 +1820,30 @@ pub export fn vtermz_new(rows: c_int, cols: c_int) callconv(.c) *VTerm {
     t.* = ghostty_vt.Terminal.init(alloc, .{
         .rows = @intCast(rows),
         .cols = @intCast(cols),
-        .colors = .{
-            .foreground = .init(
-                .{
-                    .r = 0xfa,
-                    .g = 0xfa,
-                    .b = 0xfa,
-                },
-            ),
-            .background = .init(
-                .{
-                    .r = 0x10,
-                    .g = 0x10,
-                    .b = 0x10,
-                },
-            ),
-            .cursor = .init(
-                .{
-                    .r = 0xfa,
-                    .g = 0xfa,
-                    .b = 0xfa,
-                },
-            ),
-            .palette = .default,
-        },
+        // .colors = .{
+        // .foreground = .init(
+        //     .{
+        //         .r = 0xfa,
+        //         .g = 0xfa,
+        //         .b = 0xfa,
+        //     },
+        // ),
+        // .background = .init(
+        //     .{
+        //         .r = 0x10,
+        //         .g = 0x10,
+        //         .b = 0x10,
+        //     },
+        // ),
+        // .cursor = .init(
+        //     .{
+        //         .r = 0xfa,
+        //         .g = 0xfa,
+        //         .b = 0xfa,
+        //     },
+        // ),
+        // .palette = .default,
+        // },
     }) catch preserve_exit(e_outofmem);
 
     const rs: ghostty_vt.RenderState = .empty;
@@ -2246,8 +2247,10 @@ pub export fn vtermz_screen_get_cell(vt: *VTerm, pos: VTermPos, ret: *anyopaque)
                 @branchHint(.likely);
                 vcell.schar = codepoint;
             }
+            // TODO: set width with utf_ptr2cells_len?
         },
         .codepoint_grapheme => {
+            // TODO: handle links.
             var buf: [c.MAX_SCHAR_SIZE]u8 = undefined;
             var idx: usize = 0;
             for (cell.grapheme) |g| {
@@ -2300,26 +2303,60 @@ pub export fn vtermz_screen_get_cell(vt: *VTerm, pos: VTermPos, ret: *anyopaque)
 
     //   cell->fg = intcell->pen.fg;
     //   cell->bg = intcell->pen.bg;
-    const fg = cell_style.fg(.{ .default = vt.rs.colors.foreground, .palette = &vt.rs.colors.palette, .bold = null });
-    const bg = cell_style.bg(&cell.raw, &vt.rs.colors.palette) orelse vt.rs.colors.background;
-    vcell.fg = .{
-        .rgb = .{
-            .type = 0,
-            .red = fg.r,
-            .green = fg.g,
-            .blue = fg.b,
-        },
-    };
-    vcell.bg = .{
-        .rgb = .{
-            .type = 0,
-            .red = bg.r,
-            .green = bg.g,
-            .blue = bg.b,
-        },
-    };
+    // TODO: make this not horrible
+    if (cell.raw.style_id == 0) {
+        vcell.fg = .{
+            .type = c.VTERM_COLOR_DEFAULT_FG,
+        };
+        vcell.bg = .{
+            .type = c.VTERM_COLOR_DEFAULT_BG,
+        };
+    } else {
+        if (cell_style.fg_color == .palette) {
+            vcell.fg = .{
+                .indexed = .{
+                    .type = c.VTERM_COLOR_INDEXED,
+                    .idx = cell_style.fg_color.palette,
+                },
+            };
+        } else {
+            const fg = cell_style.fg(.{
+                .default = vt.rs.colors.foreground,
+                .palette = &vt.rs.colors.palette,
+                .bold = null,
+            });
+            vcell.fg = .{
+                .rgb = .{
+                    .type = 0,
+                    .red = fg.r,
+                    .green = fg.g,
+                    .blue = fg.b,
+                },
+            };
+        }
+        if (cell_style.bg_color == .palette) {
+            vcell.bg = .{
+                .indexed = .{
+                    .type = c.VTERM_COLOR_INDEXED,
+                    .idx = cell_style.bg_color.palette,
+                },
+            };
+        } else if (cell_style.bg(&cell.raw, &vt.rs.colors.palette)) |bg| {
+            vcell.bg = .{
+                .rgb = .{
+                    .type = 0,
+                    .red = bg.r,
+                    .green = bg.g,
+                    .blue = bg.b,
+                },
+            };
+        } else {
+            vcell.bg = .{
+                .type = c.VTERM_COLOR_DEFAULT_BG,
+            };
+        }
+    }
 
-    c.vterm_screen_cell_setz(&vcell, ret);
     // const raw_value: u32 = std.math.maxInt(u32);
     // vcell.attrs = @bitCast(raw_value);
 
@@ -2329,10 +2366,12 @@ pub export fn vtermz_screen_get_cell(vt: *VTerm, pos: VTermPos, ret: *anyopaque)
     vcell.width = 1;
     if (pos.col < vt.t.cols - 1) {
         const adj = cell_row.cells.get(@intCast(pos.col + 1));
-        if (adj.raw.content_tag == .codepoint and adj.raw.content.codepoint == '\\') {
-            vcell.width = 2;
-        }
+        _ = adj;
+        // if (adj.raw.content_tag == .codepoint and adj.raw.content.codepoint == '\\') {
+        //     vcell.width = 2;
+        // }
     }
+    c.vterm_screen_cell_setz(&vcell, ret);
     // TODO: figure out what the deal is what this.
     //   if (pos.col < (screen->cols - 1)
     //       && getcell(screen, pos.row, pos.col + 1)->schar == (uint32_t)-1) {
