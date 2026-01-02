@@ -39,8 +39,9 @@ fn test_preserve_exit(e: [*c]const u8) noreturn {
 }
 
 const builtin = @import("builtin");
+// Don't feel like touching main.c so I can access preserve_exit in tests.
 const preserve_exit = if (builtin.is_test) test_preserve_exit else c.preserve_exit;
-const e_outofmem = if (builtin.is_test) "ERROR: out of memory" else c.e_outofmem;
+const e_outofmem = c.e_outofmem;
 pub const NUL = '\x00';
 
 // // ================================================================================
@@ -1834,6 +1835,7 @@ pub const VTerm = struct {
     },
     outbuffer: [VTERM_BUF_DEFAULT_SIZE]u8,
     outbuffer_cur: usize,
+    outbuffer_w: std.Io.Writer,
     tmpbuffer: [VTERM_BUF_DEFAULT_SIZE]u8,
     // apc_buf: std.ArrayList(u8),
     //
@@ -1866,25 +1868,22 @@ pub export fn vtermz_new(rows: c_int, cols: c_int) callconv(.c) *VTerm {
 
     const handler = vterm_handler.Handler.init(t, alloc);
     const stream = vterm_handler.Stream.initAlloc(alloc, handler);
+
     var vt = alloc.create(VTerm) catch preserve_exit(e_outofmem);
     vt.t = t;
     vt.rs = rs;
     vt.s = stream;
+    vt.outbuffer_w = std.Io.Writer.fixed(&vt.outbuffer);
     vt.allocator = alloc;
     return vt;
 }
 
 // DONE
 pub export fn vtermz_free(vt: *VTerm) callconv(.c) void {
-    std.debug.print("deinitting vt.t\n", .{});
     vt.t.deinit(vt.allocator);
-    std.debug.print("deinitting vt.rs\n", .{});
     vt.rs.deinit(vt.allocator);
-    std.debug.print("deinitting vt.s\n", .{});
     vt.s.deinit();
-    std.debug.print("destroying vt.t\n", .{});
     vt.allocator.destroy(vt.t);
-    std.debug.print("destroying vt\n", .{});
     vt.allocator.destroy(vt);
     if (builtin.is_test) {
         vtermz_teardown();
@@ -2206,239 +2205,305 @@ pub fn vtermz_push_output_sprintf(vt: *VTerm, comptime format: []const u8, args:
 //   assert(stack->size > 0);
 //   return stack->items[stack->size - 1];
 // }
-pub fn vtermz_state_get_key_encoding_flags(vt: *const VTerm) VTermKeyEncodingFlags {
-    const stack = switch (vt.t.screens.active_key) {
-        .primary => vt.key_encoding_stack.primary,
-        .alternate => vt.key_encoding_stack.alternate,
+// pub fn vtermz_state_get_key_encoding_flags(vt: *const VTerm) VTermKeyEncodingFlags {
+//     const stack = switch (vt.t.screens.active_key) {
+//         .primary => vt.key_encoding_stack.primary,
+//         .alternate => vt.key_encoding_stack.alternate,
+//     };
+//     std.debug.assert(stack.size > 0);
+//     return stack.items[stack.size - 1];
+// }
+//
+//
+// TODO: make this a static lookup
+inline fn vterm_key_to_ghostty_key(vkey: VTermKey) ?ghostty_vt.input.Key {
+    const val = @intFromEnum(vkey);
+    if (val >= @intFromEnum(VTermKey.function_0) and val <= @intFromEnum(VTermKey.function_max)) {
+        const new_val = val - @intFromEnum(VTermKey.function_0);
+        const ghostty_f1 = @intFromEnum(ghostty_vt.input.Key.f1);
+        const ghostty_fmax = @intFromEnum(ghostty_vt.input.Key.f25);
+        if (new_val == 0 or new_val > (ghostty_fmax - ghostty_f1)) return null;
+        return @enumFromInt(ghostty_f1 + (new_val - 1));
+    }
+    return switch (vkey) {
+        .none => null,
+        .enter => .enter,
+        .tab => .tab,
+        .backspace => .backspace,
+        .escape => .escape,
+        .up => .arrow_up,
+        .down => .arrow_down,
+        .left => .arrow_left,
+        .right => .arrow_right,
+        .ins => .insert,
+        .del => .delete,
+        .home => .home,
+        .end => .end,
+        .pageup => ghostty_vt.input.Key.page_up,
+        .pagedown => .page_down,
+        .function_0 => @panic("this should never happen"),
+        .function_max => @panic("this should never happen"),
+        .kp_0 => .numpad_0,
+        .kp_1 => .numpad_1,
+        .kp_2 => .numpad_2,
+        .kp_3 => .numpad_3,
+        .kp_4 => .numpad_4,
+        .kp_5 => .numpad_5,
+        .kp_6 => .numpad_6,
+        .kp_7 => .numpad_7,
+        .kp_8 => .numpad_8,
+        .kp_9 => .numpad_9,
+        .kp_mult => .numpad_multiply,
+        .kp_plus => .numpad_add,
+        .kp_comma => .numpad_comma,
+        .kp_minus => .numpad_subtract,
+        .kp_period => .numpad_decimal,
+        .kp_divide => .numpad_divide,
+        .kp_enter => .numpad_enter,
+        .kp_equal => .numpad_equal,
+        .max => null, // Must be last
     };
-    std.debug.assert(stack.size > 0);
-    return stack.items[stack.size - 1];
 }
 
-pub export fn vtermz_keyboard_key(vt: *VTerm, key: VTermKey, mod: VTermModifier) callconv(.c) void {
-    // vt.s.
-    if (key == .none) {
-        return;
-    }
+inline fn vterm_mod_to_ghostty_mod(mod: VTermModifier) ghostty_vt.input.KeyMods {
+    _ = mod;
+    return .{ .caps_lock = true };
+}
 
-    // VTermKeyEncodingFlags flags = vterm_state_get_key_encoding_flags(vt->state);
-    var flags = vtermz_state_get_key_encoding_flags(vt);
-    // keycodes_s k;
-    var k: KeyCodes = undefined;
-    // if (key < VTERM_KEY_FUNCTION_0) {
-    //   if (key >= sizeof(keycodes)/sizeof(keycodes[0])) {
-    //     return;
-    //   }
-    //   k = keycodes[key];
-    if (@intFromEnum(key) < @intFromEnum(VTermKey.function_0)) {
-        if (@intFromEnum(key) >= keycodes.len) {
-            return;
-        }
-        k = keycodes[@intCast(@intFromEnum(key))];
-        // } else if (key >= VTERM_KEY_FUNCTION_0 && key <= VTERM_KEY_FUNCTION_MAX) {
-        //   if ((key - VTERM_KEY_FUNCTION_0) >= sizeof(keycodes_fn)/sizeof(keycodes_fn[0])) {
-        //     return;
-        //   }
-        //   k = keycodes_fn[key - VTERM_KEY_FUNCTION_0];
-    } else if (@intFromEnum(key) >= @intFromEnum(VTermKey.function_0) and @intFromEnum(key) <= @intFromEnum(VTermKey.function_max)) {
-        if ((@intFromEnum(key) - @intFromEnum(VTermKey.function_0)) >= keycodes_fn.len) {
-            return;
-        }
-        k = keycodes_fn[@intCast(@intFromEnum(key) - @intFromEnum(VTermKey.function_0))];
-        // } else if (key >= VTERM_KEY_KP_0) {
-        //   if ((key - VTERM_KEY_KP_0) >= sizeof(keycodes_kp)/sizeof(keycodes_kp[0])) {
-        //     return;
-        //   }
-        //   if (flags.disambiguate) {
-        //     k = keycodes_kp_csiu[key - VTERM_KEY_KP_0];
-        //   } else {
-        //     k = keycodes_kp[key - VTERM_KEY_KP_0];
-        //   }
-    } else if (@intFromEnum(key) >= @intFromEnum(VTermKey.kp_0)) {
-        if ((@intFromEnum(key) - @intFromEnum(VTermKey.kp_0)) >= keycodes_kp.len) {
-            return;
-        }
-        const idx: usize = @intCast(@intFromEnum(key) - @intFromEnum(VTermKey.kp_0));
-        if (flags.disambiguate) {
-            k = keycodes_kp_csiu[idx];
-        } else {
-            k = keycodes_kp[idx];
-        }
-    }
-    // }
-
-    sw: switch (k.type) {
-        // case KEYCODE_NONE:
-        //   break;
-        .none => {},
-        // case KEYCODE_TAB:
-        //   // Shift-Tab is CSI Z but plain Tab is 0x09
-        //   if (flags.disambiguate) {
-        //     goto case_LITERAL;
-        //   } else if (mod == VTERM_MOD_SHIFT) {
-        //     vterm_push_output_sprintf_ctrl(vt, C1_CSI, "Z");
-        //   } else if (mod & VTERM_MOD_SHIFT) {
-        //     vterm_push_output_sprintf_ctrl(vt, C1_CSI, "1;%dZ", mod + 1);
-        //   } else {
-        //     goto case_LITERAL;
-        //   }
-        //   break;
-        .tab => {
-            if (flags.disambiguate) {
-                continue :sw .literal;
-            } else if (mod == VTERM_MOD_SHIFT) {
-                // TODO:
-                // vterm_push_output_sprintf_ctrl(vt, C1_CSI, "Z");
-            } else if ((mod & VTERM_MOD_SHIFT) == VTERM_MOD_SHIFT) {
-                // TODO:
-                // vterm_push_output_sprintf_ctrl(vt, C1_CSI, "1;%dZ", mod + 1);
-            } else {
-                continue :sw .literal;
-            }
-        },
-        // case KEYCODE_ENTER:
-        //   // Enter is CRLF in newline mode, but just LF in linefeed
-        //   if (vt->state->mode.newline) {
-        //     vterm_push_output_sprintf(vt, "\r\n");
-        //   } else {
-        //     goto case_LITERAL;
-        //   }
-        //   break;
-        .enter => {
-            // TODO: make sure this is the same
-            // if (vt.state->mode.newline) {
-            if (vt.t.modes.get(.linefeed)) {
-                vtermz_push_output_sprintf(vt, "\r\n", .{});
-            } else {
-                continue :sw .literal;
-            }
-        },
-        // case KEYCODE_LITERAL:
-        //                       case_LITERAL:
-        //   if (flags.disambiguate) {
-        //     switch (key) {
-        //     case VTERM_KEY_TAB:
-        //     case VTERM_KEY_ENTER:
-        //     case VTERM_KEY_BACKSPACE:
-        //       // If there are no mods then leave these as-is
-        //       flags.disambiguate = mod != VTERM_MOD_NONE;
-        //       break;
-        //     default:
-        //       break;
-        //     }
-        //   }
-        //
-        //   if (flags.disambiguate) {
-        //     vterm_push_output_sprintf_ctrl(vt, C1_CSI, "%d;%du", k.literal, mod + 1);
-        //   } else {
-        //     vterm_push_output_sprintf(vt, mod & VTERM_MOD_ALT ? ESC_S "%c" : "%c", k.literal);
-        //   }
-        //   break;
-        .literal => {
-            if (flags.disambiguate) {
-                switch (key) {
-                    .tab, .enter, .backspace => flags.disambiguate = mod != VTERM_MOD_NONE,
-                    else => {},
-                }
-            }
-
-            //   TODO:
-            //   if (flags.disambiguate) {
-            //     vterm_push_output_sprintf_ctrl(vt, C1_CSI, "%d;%du", k.literal, mod + 1);
-            //   } else {
-            //     vterm_push_output_sprintf(vt, mod & VTERM_MOD_ALT ? ESC_S "%c" : "%c", k.literal);
-            //   }
-        },
-        // case KEYCODE_SS3:
-        //                   case_SS3:
-        //   if (mod == 0) {
-        //     vterm_push_output_sprintf_ctrl(vt, C1_SS3, "%c", k.literal);
-        //   } else {
-        //     goto case_CSI;
-        //   }
-        //   break;
-        .ss3 => {
-            if (mod == 0) {
-                // TODO:
-                // vterm_push_output_sprintf_ctrl(vt, C1_SS3, "%c", k.literal);
-            } else {
-                continue :sw .csi;
-            }
-        },
-        // case KEYCODE_CSI:
-        //                   case_CSI:
-        //   if (mod == 0) {
-        //     vterm_push_output_sprintf_ctrl(vt, C1_CSI, "%c", k.literal);
-        //   } else {
-        //     vterm_push_output_sprintf_ctrl(vt, C1_CSI, "1;%d%c", mod + 1, k.literal);
-        //   }
-        //   break;
-        .csi => {
-            if (mod == 0) {
-                // TODO:
-                // vterm_push_output_sprintf_ctrl(vt, C1_CSI, "%c", k.literal);
-            } else {
-                // TODO:
-                // vterm_push_output_sprintf_ctrl(vt, C1_CSI, "1;%d%c", mod + 1, k.literal);
-            }
-        },
-        // case KEYCODE_CSINUM:
-        //   if (mod == 0) {
-        //     vterm_push_output_sprintf_ctrl(vt, C1_CSI, "%d%c", k.csinum, k.literal);
-        //   } else {
-        //     vterm_push_output_sprintf_ctrl(vt, C1_CSI, "%d;%d%c", k.csinum, mod + 1, k.literal);
-        //   }
-        //   break;
-        .csinum => {
-            if (mod == 0) {
-                // TODO:
-                // vterm_push_output_sprintf_ctrl(vt, C1_CSI, "%d%c", k.csinum, k.literal);
-            } else {
-                // TODO:
-                // vterm_push_output_sprintf_ctrl(vt, C1_CSI, "%d;%d%c", k.csinum, mod + 1, k.literal);
-            }
-        },
-        // case KEYCODE_CSI_CURSOR:
-        //   if (vt->state->mode.cursor) {
-        //     goto case_SS3;
-        //   } else {
-        //     goto case_CSI;
-        //   }
-        .csi_cursor => {
-            // TODO:
-            // if (vt->state->mode.cursor) {
-            if (false) {
-                continue :sw .ss3;
-            } else {
-                continue :sw .csi;
-            }
-        },
-        // case KEYCODE_KEYPAD:
-        //   if (vt->state->mode.keypad) {
-        //     k.literal = k.csinum;
-        //     goto case_SS3;
-        //   } else {
-        //     goto case_LITERAL;
-        //   }
-        // }
-        .keypad => {
-            // TODO:
-            // if (vt->state->mode.keypad) {
-            if (false) {
-                k.literal = k.csinum;
-                continue :sw .ss3;
-            } else {
-                continue :sw .literal;
-            }
-        },
+pub export fn vtermz_keyboard_key(vt: *VTerm, vkey: VTermKey, vmod: VTermModifier) callconv(.c) void {
+    const key = vterm_key_to_ghostty_key(vkey) orelse return;
+    const mods = vterm_mod_to_ghostty_mod(vmod);
+    const evt = ghostty_vt.input.KeyEvent{ .key = key, .mods = mods, .action = .press };
+    // TODO: handle error
+    ghostty_vt.input.encodeKey(&vt.outbuffer_w, evt, .{}) catch return;
+    if (vt.outfunc) |outfunc| {
+        const buf = vt.outbuffer_w.buffered();
+        outfunc(buf.ptr, buf.len, vt.outdata);
+        _ = vt.outbuffer_w.consumeAll();
     }
 }
+// pub export fn vtermz_keyboard_key(vt: *VTerm, key: VTermKey, mod: VTermModifier) callconv(.c) void {
+//     // vt.s.
+//     if (key == .none) {
+//         return;
+//     }
+//
+//     // VTermKeyEncodingFlags flags = vterm_state_get_key_encoding_flags(vt->state);
+//     var flags = vtermz_state_get_key_encoding_flags(vt);
+//     // keycodes_s k;
+//     var k: KeyCodes = undefined;
+//     // if (key < VTERM_KEY_FUNCTION_0) {
+//     //   if (key >= sizeof(keycodes)/sizeof(keycodes[0])) {
+//     //     return;
+//     //   }
+//     //   k = keycodes[key];
+//     if (@intFromEnum(key) < @intFromEnum(VTermKey.function_0)) {
+//         if (@intFromEnum(key) >= keycodes.len) {
+//             return;
+//         }
+//         k = keycodes[@intCast(@intFromEnum(key))];
+//         // } else if (key >= VTERM_KEY_FUNCTION_0 && key <= VTERM_KEY_FUNCTION_MAX) {
+//         //   if ((key - VTERM_KEY_FUNCTION_0) >= sizeof(keycodes_fn)/sizeof(keycodes_fn[0])) {
+//         //     return;
+//         //   }
+//         //   k = keycodes_fn[key - VTERM_KEY_FUNCTION_0];
+//     } else if (@intFromEnum(key) >= @intFromEnum(VTermKey.function_0) and @intFromEnum(key) <= @intFromEnum(VTermKey.function_max)) {
+//         if ((@intFromEnum(key) - @intFromEnum(VTermKey.function_0)) >= keycodes_fn.len) {
+//             return;
+//         }
+//         k = keycodes_fn[@intCast(@intFromEnum(key) - @intFromEnum(VTermKey.function_0))];
+//         // } else if (key >= VTERM_KEY_KP_0) {
+//         //   if ((key - VTERM_KEY_KP_0) >= sizeof(keycodes_kp)/sizeof(keycodes_kp[0])) {
+//         //     return;
+//         //   }
+//         //   if (flags.disambiguate) {
+//         //     k = keycodes_kp_csiu[key - VTERM_KEY_KP_0];
+//         //   } else {
+//         //     k = keycodes_kp[key - VTERM_KEY_KP_0];
+//         //   }
+//     } else if (@intFromEnum(key) >= @intFromEnum(VTermKey.kp_0)) {
+//         if ((@intFromEnum(key) - @intFromEnum(VTermKey.kp_0)) >= keycodes_kp.len) {
+//             return;
+//         }
+//         const idx: usize = @intCast(@intFromEnum(key) - @intFromEnum(VTermKey.kp_0));
+//         if (flags.disambiguate) {
+//             k = keycodes_kp_csiu[idx];
+//         } else {
+//             k = keycodes_kp[idx];
+//         }
+//     }
+//     // }
+//
+//     sw: switch (k.type) {
+//         // case KEYCODE_NONE:
+//         //   break;
+//         .none => {},
+//         // case KEYCODE_TAB:
+//         //   // Shift-Tab is CSI Z but plain Tab is 0x09
+//         //   if (flags.disambiguate) {
+//         //     goto case_LITERAL;
+//         //   } else if (mod == VTERM_MOD_SHIFT) {
+//         //     vterm_push_output_sprintf_ctrl(vt, C1_CSI, "Z");
+//         //   } else if (mod & VTERM_MOD_SHIFT) {
+//         //     vterm_push_output_sprintf_ctrl(vt, C1_CSI, "1;%dZ", mod + 1);
+//         //   } else {
+//         //     goto case_LITERAL;
+//         //   }
+//         //   break;
+//         .tab => {
+//             if (flags.disambiguate) {
+//                 continue :sw .literal;
+//             } else if (mod == VTERM_MOD_SHIFT) {
+//                 // TODO:
+//                 // vterm_push_output_sprintf_ctrl(vt, C1_CSI, "Z");
+//             } else if ((mod & VTERM_MOD_SHIFT) == VTERM_MOD_SHIFT) {
+//                 // TODO:
+//                 // vterm_push_output_sprintf_ctrl(vt, C1_CSI, "1;%dZ", mod + 1);
+//             } else {
+//                 continue :sw .literal;
+//             }
+//         },
+//         // case KEYCODE_ENTER:
+//         //   // Enter is CRLF in newline mode, but just LF in linefeed
+//         //   if (vt->state->mode.newline) {
+//         //     vterm_push_output_sprintf(vt, "\r\n");
+//         //   } else {
+//         //     goto case_LITERAL;
+//         //   }
+//         //   break;
+//         .enter => {
+//             // TODO: make sure this is the same
+//             // if (vt.state->mode.newline) {
+//             if (vt.t.modes.get(.linefeed)) {
+//                 vtermz_push_output_sprintf(vt, "\r\n", .{});
+//             } else {
+//                 continue :sw .literal;
+//             }
+//         },
+//         // case KEYCODE_LITERAL:
+//         //                       case_LITERAL:
+//         //   if (flags.disambiguate) {
+//         //     switch (key) {
+//         //     case VTERM_KEY_TAB:
+//         //     case VTERM_KEY_ENTER:
+//         //     case VTERM_KEY_BACKSPACE:
+//         //       // If there are no mods then leave these as-is
+//         //       flags.disambiguate = mod != VTERM_MOD_NONE;
+//         //       break;
+//         //     default:
+//         //       break;
+//         //     }
+//         //   }
+//         //
+//         //   if (flags.disambiguate) {
+//         //     vterm_push_output_sprintf_ctrl(vt, C1_CSI, "%d;%du", k.literal, mod + 1);
+//         //   } else {
+//         //     vterm_push_output_sprintf(vt, mod & VTERM_MOD_ALT ? ESC_S "%c" : "%c", k.literal);
+//         //   }
+//         //   break;
+//         .literal => {
+//             if (flags.disambiguate) {
+//                 switch (key) {
+//                     .tab, .enter, .backspace => flags.disambiguate = mod != VTERM_MOD_NONE,
+//                     else => {},
+//                 }
+//             }
+//
+//             //   TODO:
+//             //   if (flags.disambiguate) {
+//             //     vterm_push_output_sprintf_ctrl(vt, C1_CSI, "%d;%du", k.literal, mod + 1);
+//             //   } else {
+//             //     vterm_push_output_sprintf(vt, mod & VTERM_MOD_ALT ? ESC_S "%c" : "%c", k.literal);
+//             //   }
+//         },
+//         // case KEYCODE_SS3:
+//         //                   case_SS3:
+//         //   if (mod == 0) {
+//         //     vterm_push_output_sprintf_ctrl(vt, C1_SS3, "%c", k.literal);
+//         //   } else {
+//         //     goto case_CSI;
+//         //   }
+//         //   break;
+//         .ss3 => {
+//             if (mod == 0) {
+//                 // TODO:
+//                 // vterm_push_output_sprintf_ctrl(vt, C1_SS3, "%c", k.literal);
+//             } else {
+//                 continue :sw .csi;
+//             }
+//         },
+//         // case KEYCODE_CSI:
+//         //                   case_CSI:
+//         //   if (mod == 0) {
+//         //     vterm_push_output_sprintf_ctrl(vt, C1_CSI, "%c", k.literal);
+//         //   } else {
+//         //     vterm_push_output_sprintf_ctrl(vt, C1_CSI, "1;%d%c", mod + 1, k.literal);
+//         //   }
+//         //   break;
+//         .csi => {
+//             if (mod == 0) {
+//                 // TODO:
+//                 // vterm_push_output_sprintf_ctrl(vt, C1_CSI, "%c", k.literal);
+//             } else {
+//                 // TODO:
+//                 // vterm_push_output_sprintf_ctrl(vt, C1_CSI, "1;%d%c", mod + 1, k.literal);
+//             }
+//         },
+//         // case KEYCODE_CSINUM:
+//         //   if (mod == 0) {
+//         //     vterm_push_output_sprintf_ctrl(vt, C1_CSI, "%d%c", k.csinum, k.literal);
+//         //   } else {
+//         //     vterm_push_output_sprintf_ctrl(vt, C1_CSI, "%d;%d%c", k.csinum, mod + 1, k.literal);
+//         //   }
+//         //   break;
+//         .csinum => {
+//             if (mod == 0) {
+//                 // TODO:
+//                 // vterm_push_output_sprintf_ctrl(vt, C1_CSI, "%d%c", k.csinum, k.literal);
+//             } else {
+//                 // TODO:
+//                 // vterm_push_output_sprintf_ctrl(vt, C1_CSI, "%d;%d%c", k.csinum, mod + 1, k.literal);
+//             }
+//         },
+//         // case KEYCODE_CSI_CURSOR:
+//         //   if (vt->state->mode.cursor) {
+//         //     goto case_SS3;
+//         //   } else {
+//         //     goto case_CSI;
+//         //   }
+//         .csi_cursor => {
+//             // TODO:
+//             // if (vt->state->mode.cursor) {
+//             if (false) {
+//                 continue :sw .ss3;
+//             } else {
+//                 continue :sw .csi;
+//             }
+//         },
+//         // case KEYCODE_KEYPAD:
+//         //   if (vt->state->mode.keypad) {
+//         //     k.literal = k.csinum;
+//         //     goto case_SS3;
+//         //   } else {
+//         //     goto case_LITERAL;
+//         //   }
+//         // }
+//         .keypad => {
+//             // TODO:
+//             // if (vt->state->mode.keypad) {
+//             if (false) {
+//                 k.literal = k.csinum;
+//                 continue :sw .ss3;
+//             } else {
+//                 continue :sw .literal;
+//             }
+//         },
+//     }
+// }
 
 test "vterm" {
     const vt = vtermz_new(40, 80);
-    std.debug.print("made vterm new", .{});
     defer vtermz_free(vt);
-    std.debug.print("freed vt", .{});
 
     // const osc_4 = "\x1b]4;1;?\x1b\\\x1b]4;2;?\x1b\\\x1b[1;31m";
     const osc_4 = "\x1b]4;1;?\x1b\x1b]4;2;?\x1b\\\x1b]4;3;?\x07\x1b7\x1b[1;31m\x1b(0\x1b(B\x1b[H";
@@ -2473,10 +2538,8 @@ test "vterm" {
 
     var res: usize = 0;
     for (commands) |cmd| {
-        std.debug.print("writing cmd: {any}", .{cmd});
         res = vtermz_input_write(vt, cmd.ptr, cmd.len);
     }
-    std.debug.print("finished cmds", .{});
     // try std.testing.expectEqual(res, 1);
 }
 
