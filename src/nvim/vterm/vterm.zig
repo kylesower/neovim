@@ -1834,6 +1834,9 @@ pub const VTerm = struct {
         primary: VTermKeyEncodingStack,
         alternate: VTermKeyEncodingStack,
     },
+    // TODO: I don't think we even need 64 bytes for this. libvterm had 4096 bytes for
+    // outbuffer, but I don't think it was fully used because it was all
+    // handled by outfunc. Maybe I'm missing something, though.
     keyout_buffer: [VTERM_BUF_DEFAULT_SIZE]u8,
     keyout_buffer_w: std.Io.Writer,
     // tmpbuffer: [VTERM_BUF_DEFAULT_SIZE]u8,
@@ -1922,9 +1925,6 @@ pub export fn vtermz_teardown() callconv(.c) void {
     _ = gpa.deinit();
 }
 
-// void vterm_keyboard_unichar(VTerm *vt, uint32_t c, VTermModifier mod)
-// void vterm_keyboard_key(VTerm *vt, VTermKey key, VTermModifier mod)
-// size_t vterm_input_write(VTerm *vt, const char *bytes, size_t len)
 pub export fn vtermz_input_write(vt: *VTerm, bytes: [*]const u8, len: usize) callconv(.c) usize {
     // TODO: handle errors
     vt.s.nextSlice(bytes[0..len]) catch {};
@@ -2243,7 +2243,8 @@ pub export fn vtermz_output_set_callback(
 // }
 //
 //
-// TODO: make this a static lookup
+// TODO: make this a static lookup or rework terminal.c so it can make use of
+// ghostty keys directly
 inline fn vterm_key_to_ghostty_key(vkey: VTermKey) ?ghostty_vt.input.Key {
     const val = @intFromEnum(vkey);
     if (val >= @intFromEnum(VTermKey.function_0) and val <= @intFromEnum(VTermKey.function_max)) {
@@ -2294,30 +2295,126 @@ inline fn vterm_key_to_ghostty_key(vkey: VTermKey) ?ghostty_vt.input.Key {
 }
 
 inline fn vterm_mod_to_ghostty_mod(vmod: VTermModifier) ghostty_vt.input.KeyMods {
-    var mod: ghostty_vt.input.KeyMods = .{};
-    if (vmod & VTERM_MOD_ALT > 0) {
-        mod.alt = true;
-    }
-    if (vmod & VTERM_MOD_CTRL > 0) {
-        mod.ctrl = true;
-    }
-    if (vmod & VTERM_MOD_SHIFT > 0) {
-        mod.shift = true;
-    }
-    return mod;
+    return .{
+        .alt = vmod & VTERM_MOD_ALT > 0,
+        .ctrl = vmod & VTERM_MOD_CTRL > 0,
+        .shift = vmod & VTERM_MOD_SHIFT > 0,
+    };
 }
 
 pub export fn vtermz_keyboard_key(vt: *VTerm, vkey: VTermKey, vmod: VTermModifier) callconv(.c) void {
     const key = vterm_key_to_ghostty_key(vkey) orelse return;
     const mods = vterm_mod_to_ghostty_mod(vmod);
-    const evt = ghostty_vt.input.KeyEvent{ .key = key, .mods = mods, .action = .press };
+    const evt: ghostty_vt.input.KeyEvent = .{
+        .key = key,
+        .mods = mods,
+        .action = .press,
+    };
     // TODO: handle error
     ghostty_vt.input.encodeKey(&vt.keyout_buffer_w, evt, .{}) catch return;
     if (vt.outfunc) |outfunc| {
         const buf = vt.keyout_buffer_w.buffered();
         outfunc(buf.ptr, buf.len, vt.outdata);
-        _ = vt.keyout_buffer_w.consumeAll();
     }
+    _ = vt.keyout_buffer_w.consumeAll();
+}
+
+pub export fn vtermz_keyboard_unichar(vt: *VTerm, ch: u32, vmod: VTermModifier) callconv(.c) void {
+    //   bool passthru = false;
+    //   if (c == ' ') {
+    //     // Space is passed through only when there are no modifiers (including shift)
+    //     passthru = mod == VTERM_MOD_NONE;
+    //   } else {
+    //     // Otherwise pass through when there are no modifiers (ignoring shift)
+    //     passthru = (mod & (unsigned)~VTERM_MOD_SHIFT) == 0;
+    //   }
+    var passthru = false;
+    if (ch == ' ') {
+        passthru = vmod == VTERM_MOD_NONE;
+    } else {
+        passthru = (vmod & (~VTERM_MOD_SHIFT)) == 0;
+    }
+
+    //   if (passthru) {
+    //     char str[6];
+    //     int seqlen = fill_utf8((int)c, str);
+    //     vterm_push_output_bytes(vt, str, (size_t)seqlen);
+    //     return;
+    //   }
+    //
+    if (passthru) {
+        if (ch > std.math.maxInt(u21)) return;
+        const len = std.unicode.utf8Encode(@intCast(ch), vt.keyout_buffer[0..4]) catch 0;
+        if (vt.outfunc) |outfunc| {
+            outfunc(&vt.keyout_buffer, len, vt.outdata);
+        }
+        return;
+    }
+
+    //   VTermKeyEncodingFlags flags = vterm_state_get_key_encoding_flags(vt->state);
+    //   if (flags.disambiguate) {
+    //     // Always use unshifted codepoint
+    //     if (c >= 'A' && c <= 'Z') {
+    //       c += 'a' - 'A';
+    //       mod |= VTERM_MOD_SHIFT;
+    //     }
+    //
+    //     vterm_push_output_sprintf_ctrl(vt, C1_CSI, "%d;%du", c, mod + 1);
+    //     return;
+    //   }
+    //   if (mod & VTERM_MOD_CTRL) {
+    //     // Handle special cases. These are taken from kitty, but seem mostly
+    //     // consistent across terminals.
+    //     switch (c) {
+    //     case '2':
+    //     case ' ':
+    //       // Ctrl+2 is NUL to match Ctrl+@ (which is Shift+2 on US keyboards)
+    //       // Ctrl+Space is also NUL for some reason
+    //       c = 0x00;
+    //       break;
+    //     case '3':
+    //     case '4':
+    //     case '5':
+    //     case '6':
+    //     case '7':
+    //       // Ctrl+3 through Ctrl+7 are sequential starting from 0x1b. Importantly,
+    //       // this means that Ctrl+6 emits 0x1e (the same as Ctrl+^ on US keyboards)
+    //       c = 0x1b + c - '3';
+    //       break;
+    //     case '8':
+    //       // Ctrl+8 is DEL
+    //       c = 0x7f;
+    //       break;
+    //     case '/':
+    //       // Ctrl+/ is equivalent to Ctrl+_ for historic reasons
+    //       c = 0x1f;
+    //       break;
+    //     default:
+    //       if (c >= '@' && c <= 0x7f) {
+    //         c &= 0x1f;
+    //       }
+    //       break;
+    //     }
+    //   }
+    //
+    //   vterm_push_output_sprintf(vt, "%s%c", mod & VTERM_MOD_ALT ? ESC_S : "", c);
+    //
+    // TODO: make sure all this is handled correctly :)
+    if (ch > std.math.maxInt(u8)) {
+        @panic("I wrongly assumed everything from here on out would be ASCII");
+    }
+    const key = ghostty_vt.input.Key.fromASCII(@intCast(ch)) orelse return;
+    const evt: ghostty_vt.input.KeyEvent = .{
+        .key = key,
+        .mods = vterm_mod_to_ghostty_mod(vmod),
+        .action = .press,
+    };
+    ghostty_vt.input.encodeKey(&vt.keyout_buffer_w, evt, .{}) catch return;
+    if (vt.outfunc) |outfunc| {
+        const buf = vt.keyout_buffer_w.buffered();
+        outfunc(buf.ptr, buf.len, vt.outdata);
+    }
+    _ = vt.keyout_buffer_w.consumeAll();
 }
 
 pub export fn vtermz_screen_get_cell(vt: *VTerm, pos: VTermPos, ret: *anyopaque) callconv(.c) c_int {

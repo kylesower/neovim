@@ -1181,7 +1181,8 @@ static void terminal_send_key(Terminal *term, int c)
     // vterm_keyboard_key(term->vt, key, mod);
     vtermz_keyboard_key(term->vtz, key, mod);
   } else if (!IS_SPECIAL(c)) {
-    vterm_keyboard_unichar(term->vt, (uint32_t)c, mod);
+    // vterm_keyboard_unichar(term->vt, (uint32_t)c, mod);
+    vtermz_keyboard_unichar(term->vtz, (uint32_t)c, mod);
   }
 }
 

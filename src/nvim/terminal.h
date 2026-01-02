@@ -38,3 +38,4 @@ void vtermz_keyboard_key(VTermZ *vtz, VTermKey key, VTermModifier mod);
 void vtermz_teardown(void);
 int vtermz_screen_get_cell(const VTermZ *screen, VTermPos pos, VTermScreenCell *cell);
 void vtermz_refresh(VTermZ *vt);
+void vtermz_keyboard_unichar(VTermZ *vt, uint32_t c, VTermModifier mod);
