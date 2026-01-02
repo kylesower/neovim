@@ -2445,21 +2445,18 @@ pub export fn vtermz_screen_get_cell(vt: *VTerm, pos: VTermPos, ret: *anyopaque)
                 _ = std.unicode.utf8Encode(codepoint, &buf) catch return 0;
                 vcell.schar = std.mem.bytesToValue(u32, &buf);
             } else {
+                @branchHint(.likely);
                 vcell.schar = codepoint;
             }
         },
         .codepoint_grapheme => {
-            // TODO: grapheme clusters
-            // std.debug.print("ignoring grapheme\n", .{});
-            // c.schar_from_buf(&buf, len);
-            vcell.schar = 0;
-            // var buf: [4]u8 = undefined;
-            // _ = std.unicode.utf8Encode(cell.grapheme[0], &buf) catch {};
-            // if (std.mem.eql(u8, "\xe2\x9d\xaf", buf[0..3])) {
-            //     std.debug.print("got my codepoint! {d}", .{cell.grapheme[0]});
-            //     @panic("all done");
-            // }
-            // vcell.schar = cell.grapheme[0];
+            var buf: [c.MAX_SCHAR_SIZE]u8 = undefined;
+            var idx: usize = 0;
+            for (cell.grapheme) |g| {
+                const len = std.unicode.utf8Encode(g, buf[idx..]) catch return 0;
+                idx += len;
+            }
+            vcell.schar = c.schar_from_buf(&buf, idx);
         },
         .bg_color_palette, .bg_color_rgb => {
             vcell.schar = 0;
@@ -2532,6 +2529,12 @@ pub export fn vtermz_screen_get_cell(vt: *VTerm, pos: VTermPos, ret: *anyopaque)
     //   cell->uri = intcell->pen.uri;
     //
     vcell.width = 1;
+    if (pos.col < vt.t.cols - 1) {
+        const adj = cell_row.cells.get(@intCast(pos.col + 1));
+        if (adj.raw.content_tag == .codepoint and adj.raw.content.codepoint == '\\') {
+            vcell.width = 2;
+        }
+    }
     // TODO: figure out what the deal is what this.
     //   if (pos.col < (screen->cols - 1)
     //       && getcell(screen, pos.row, pos.col + 1)->schar == (uint32_t)-1) {
