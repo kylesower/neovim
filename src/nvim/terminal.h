@@ -36,3 +36,5 @@ void vtermz_state_set_palette_color(VTermZ *vt, int index, const VTermColor *col
 void vtermz_output_set_callback(VTermZ *vt, VTermOutputCallback *func, void *user);
 void vtermz_keyboard_key(VTermZ *vtz, VTermKey key, VTermModifier mod);
 void vtermz_teardown(void);
+int vtermz_screen_get_cell(const VTermZ *screen, VTermPos pos, VTermScreenCell *cell);
+void vtermz_refresh(VTermZ *vt);

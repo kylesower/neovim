@@ -1111,3 +1111,51 @@ int rect_intersects(VTermRect *a, VTermRect *b)
   }
   return 1;
 }
+
+
+typedef struct {
+  bool bold;
+  uint8_t underline;
+  bool italic;
+  bool blink;
+  bool reverse;
+  bool conceal;
+  bool strike;
+  uint8_t font;
+  bool dwl;
+  uint8_t dhl;
+  bool small;
+  uint8_t baseline;
+} VTermScreenCellAttrsZ;
+
+typedef struct {
+  schar_T schar;
+  char width;
+  VTermScreenCellAttrsZ attrs;
+  VTermColor fg, bg;
+  int uri;
+} VTermScreenCellZ;
+
+// bitfields don't play well between C and Zig.
+void vterm_screen_cell_setz(void *srcz, void *dstc) {
+  VTermScreenCellZ *src = (VTermScreenCellZ *)srcz;
+  VTermScreenCell *dst  = (VTermScreenCell *)dstc;
+  dst->schar            = src->schar;
+  dst->uri              = src->uri;
+  // TODO: figure out how this works.
+  // dst->width            = src->width;
+  dst->fg               = src->fg;
+  dst-> bg              = src->bg;
+  dst->attrs.bold       = src->attrs.bold;
+  dst->attrs.underline  = src->attrs.underline;
+  dst->attrs.italic     = src->attrs.italic;
+  dst->attrs.blink      = src->attrs.blink;
+  dst->attrs.reverse    = src->attrs.reverse;
+  dst->attrs.conceal    = src->attrs.conceal;
+  dst->attrs.strike     = src->attrs.strike;
+  dst->attrs.font       = src->attrs.font;
+  dst->attrs.dwl        = src->attrs.dwl;
+  dst->attrs.dhl        = src->attrs.dhl;
+  dst->attrs.small      = src->attrs.small;
+  dst->attrs.baseline   = src->attrs.baseline;
+}

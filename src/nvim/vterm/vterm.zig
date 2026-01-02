@@ -628,10 +628,10 @@ pub const C1 = enum(u8) {
 // //   int row;
 // //   int col;
 // // } VTermPos;
-// pub const VTermPos = extern struct {
-//     row: c_int,
-//     col: c_int,
-// };
+pub const VTermPos = extern struct {
+    row: c_int,
+    col: c_int,
+};
 //
 // // // some small utility functions; we can just keep these static here
 // //
@@ -680,45 +680,45 @@ pub const VTermColor = extern union {
     type: u8,
     rgb: extern struct {
         type: u8,
-        red: u8,
-        green: u8,
-        blue: u8,
+        red: u8 = 0,
+        green: u8 = 0,
+        blue: u8 = 0,
     },
     indexed: extern struct {
         type: u8,
         idx: u8,
     },
 };
-//
-// // typedef struct {
-// //   unsigned bold      : 1;
-// //   unsigned underline : 2;
-// //   unsigned italic    : 1;
-// //   unsigned blink     : 1;
-// //   unsigned reverse   : 1;
-// //   unsigned conceal   : 1;
-// //   unsigned strike    : 1;
-// //   unsigned font      : 4;  // 0 to 9
-// //   unsigned dwl       : 1;  // On a DECDWL or DECDHL line
-// //   unsigned dhl       : 2;  // On a DECDHL line (1=top 2=bottom)
-// //   unsigned small     : 1;
-// //   unsigned baseline  : 2;
-// // } VTermScreenCellAttrs;
-// pub const VTermScreenCellAttrs = extern struct {
-//     bold: bool,
-//     underline: u8, // was u2
-//     italic: bool,
-//     blink: bool,
-//     reverse: bool,
-//     conceal: bool,
-//     strike: bool,
-//     font: u8, // 0 to 9. was u2
-//     dwl: bool, // On a DECDWL or DECDHL line
-//     dhl: u8, // On a DECDHL line (1=top 2=bottom). was u2
-//     small: bool,
-//     baseline: u8, // was u2
-// };
-//
+
+// typedef struct {
+//   unsigned bold      : 1;
+//   unsigned underline : 2;
+//   unsigned italic    : 1;
+//   unsigned blink     : 1;
+//   unsigned reverse   : 1;
+//   unsigned conceal   : 1;
+//   unsigned strike    : 1;
+//   unsigned font      : 4;  // 0 to 9
+//   unsigned dwl       : 1;  // On a DECDWL or DECDHL line
+//   unsigned dhl       : 2;  // On a DECDHL line (1=top 2=bottom)
+//   unsigned small     : 1;
+//   unsigned baseline  : 2;
+// } VTermScreenCellAttrs;
+pub const VTermScreenCellAttrs = extern struct {
+    bold: bool = false,
+    underline: u8 = 0,
+    italic: bool = false,
+    blink: bool = false,
+    reverse: bool = false,
+    conceal: bool = false,
+    strike: bool = false,
+    font: u8 = 0, // 0 to 9.
+    dwl: bool = false, // On a DECDWL or DECDHL line
+    dhl: u8 = 0, // On a DECDHL line (1=top 2=bottom). was u2
+    small: bool = false,
+    baseline: u8 = 0, // was u2
+};
+
 // // typedef struct {
 // //   schar_T schar;
 // //   char width;
@@ -726,14 +726,14 @@ pub const VTermColor = extern union {
 // //   VTermColor fg, bg;
 // //   int uri;
 // // } VTermScreenCell;
-// pub const VTermScreenCell = extern struct {
-//     schar: u32,
-//     width: u8,
-//     attrs: VTermScreenCellAttrs,
-//     fg: VTermColor,
-//     bg: VTermColor,
-//     uri: c_int,
-// };
+pub const VTermScreenCell = extern struct {
+    schar: u32 = 0,
+    width: u8 = 0,
+    attrs: VTermScreenCellAttrs = .{},
+    fg: VTermColor = .{ .type = 0 },
+    bg: VTermColor = .{ .type = 0 },
+    uri: c_int = 0,
+};
 //
 // // typedef enum {
 // //   // VTERM_PROP_NONE = 0
@@ -1819,7 +1819,7 @@ const keycodes_kp_csiu: []const KeyCodes = &.{
 // };
 
 // TODO: find reasonable default size
-pub const VTERM_BUF_DEFAULT_SIZE = 4096;
+pub const VTERM_BUF_DEFAULT_SIZE = 64;
 const Terminal = ghostty_vt.Terminal;
 pub const VTerm = struct {
     t: *ghostty_vt.Terminal,
@@ -1833,10 +1833,9 @@ pub const VTerm = struct {
         primary: VTermKeyEncodingStack,
         alternate: VTermKeyEncodingStack,
     },
-    outbuffer: [VTERM_BUF_DEFAULT_SIZE]u8,
-    outbuffer_cur: usize,
-    outbuffer_w: std.Io.Writer,
-    tmpbuffer: [VTERM_BUF_DEFAULT_SIZE]u8,
+    keyout_buffer: [VTERM_BUF_DEFAULT_SIZE]u8,
+    keyout_buffer_w: std.Io.Writer,
+    // tmpbuffer: [VTERM_BUF_DEFAULT_SIZE]u8,
     // apc_buf: std.ArrayList(u8),
     //
     // const Self = @This();
@@ -1873,8 +1872,38 @@ pub export fn vtermz_new(rows: c_int, cols: c_int) callconv(.c) *VTerm {
     vt.t = t;
     vt.rs = rs;
     vt.s = stream;
-    vt.outbuffer_w = std.Io.Writer.fixed(&vt.outbuffer);
+    vt.keyout_buffer_w = std.Io.Writer.fixed(&vt.keyout_buffer);
     vt.allocator = alloc;
+    // colors taken from pen.c, but the ghostty defaults look better
+    // vterm_color_rgb(&state->default_fg, 240, 240, 240);
+    // vterm_color_rgb(&state->default_bg, 0, 0, 0);
+    // vt.t.setAttribute(.{ .direct_color_fg = .{ .r = 240, .g = 240, .b = 240 } }) catch {};
+    // vt.t.setAttribute(.{ .direct_color_bg = .{ .r = 0, .g = 0, .b = 0 } }) catch {};
+    // const palette_colors: [16][3]u8 = .{
+    //     // R    G    B
+    //     .{ 0, 0, 0 }, // black
+    //     .{ 224, 0, 0 }, // red
+    //     .{ 0, 224, 0 }, // green
+    //     .{ 224, 224, 0 }, // yellow
+    //     .{ 0, 0, 224 }, // blue
+    //     .{ 224, 0, 224 }, // magenta
+    //     .{ 0, 224, 224 }, // cyan
+    //     .{ 224, 224, 224 }, // white == light grey
+    //
+    //     // high intensity
+    //     .{ 128, 128, 128 }, // black
+    //     .{ 255, 64, 64 }, // red
+    //     .{ 64, 255, 64 }, // green
+    //     .{ 255, 255, 64 }, // yellow
+    //     .{ 64, 64, 255 }, // blue
+    //     .{ 255, 64, 255 }, // magenta
+    //     .{ 64, 255, 255 }, // cyan
+    //     .{ 255, 255, 255 }, // white for real
+    // };
+    // for (palette_colors, 0..) |col, idx| {
+    //     vt.t.colors.palette.set(@intCast(idx), .{ .r = col[0], .g = col[1], .b = col[2] });
+    // }
+    // schar = schar_from_buf();
     return vt;
 }
 
@@ -1888,6 +1917,10 @@ pub export fn vtermz_free(vt: *VTerm) callconv(.c) void {
     if (builtin.is_test) {
         vtermz_teardown();
     }
+}
+
+pub export fn vtermz_refresh(vt: *VTerm) callconv(.c) void {
+    vt.rs.update(vt.allocator, vt.t) catch preserve_exit(e_outofmem);
 }
 
 pub export fn vtermz_teardown() callconv(.c) void {
@@ -2065,27 +2098,27 @@ pub export fn vtermz_output_set_callback(
 //   memcpy(vt->outbuffer + vt->outbuffer_cur, bytes, len);
 //   vt->outbuffer_cur += len;
 // }
-pub fn vtermz_push_output_bytes(vt: *VTerm, bytes: []const u8, len: usize) void {
-    //   if (vt->outfunc) {
-    //     (vt->outfunc)(bytes, len, vt->outdata);
-    //     return;
-    //   }
-    if (vt.outfunc) |outfunc| {
-        outfunc(bytes.ptr, len, vt.outdata);
-        return;
-    }
-
-    //   if (len > vt->outbuffer_len - vt->outbuffer_cur) {
-    //     return;
-    //   }
-    if (len > vt.outbuffer.len - vt.outbuffer_cur) {
-        return;
-    }
-    // memcpy(vt->outbuffer + vt->outbuffer_cur, bytes, len);
-    @memcpy(vt.outbuffer[vt.outbuffer_cur .. vt.outbuffer_cur + len], bytes[0..len]);
-    //   vt->outbuffer_cur += len;
-    vt.outbuffer_cur += len;
-}
+// pub fn vtermz_push_output_bytes(vt: *VTerm, bytes: []const u8, len: usize) void {
+//     //   if (vt->outfunc) {
+//     //     (vt->outfunc)(bytes, len, vt->outdata);
+//     //     return;
+//     //   }
+//     if (vt.outfunc) |outfunc| {
+//         outfunc(bytes.ptr, len, vt.outdata);
+//         return;
+//     }
+//
+//     //   if (len > vt->outbuffer_len - vt->outbuffer_cur) {
+//     //     return;
+//     //   }
+//     if (len > vt.keyoutbuffer.len - vt.outbuffer_cur) {
+//         return;
+//     }
+//     // memcpy(vt->outbuffer + vt->outbuffer_cur, bytes, len);
+//     @memcpy(vt.keyoutbuffer[vt.outbuffer_cur .. vt.outbuffer_cur + len], bytes[0..len]);
+//     //   vt->outbuffer_cur += len;
+//     vt.outbuffer_cur += len;
+// }
 
 // void vterm_push_output_sprintf(VTerm *vt, const char *format, ...)
 //   FUNC_ATTR_PRINTF(2, 3)
@@ -2096,11 +2129,11 @@ pub fn vtermz_push_output_bytes(vt: *VTerm, bytes: []const u8, len: usize) void 
 //   vterm_push_output_bytes(vt, vt->tmpbuffer, len);
 //   va_end(args);
 // }
-pub fn vtermz_push_output_sprintf(vt: *VTerm, comptime format: []const u8, args: anytype) void {
-    // TODO: handle failure, but this should probably never fail.
-    const buf = std.fmt.bufPrint(&vt.tmpbuffer, format, args) catch return;
-    vtermz_push_output_bytes(vt, buf, buf.len);
-}
+// pub fn vtermz_push_output_sprintf(vt: *VTerm, comptime format: []const u8, args: anytype) void {
+//     // TODO: handle failure, but this should probably never fail.
+//     const buf = std.fmt.bufPrint(&vt.tmpbuffer, format, args) catch return;
+//     vtermz_push_output_bytes(vt, buf, buf.len);
+// }
 
 // void vterm_push_output_sprintf_ctrl(VTerm *vt, uint8_t ctrl, const char *fmt, ...)
 //   FUNC_ATTR_PRINTF(3, 4)
@@ -2284,12 +2317,118 @@ pub export fn vtermz_keyboard_key(vt: *VTerm, vkey: VTermKey, vmod: VTermModifie
     const mods = vterm_mod_to_ghostty_mod(vmod);
     const evt = ghostty_vt.input.KeyEvent{ .key = key, .mods = mods, .action = .press };
     // TODO: handle error
-    ghostty_vt.input.encodeKey(&vt.outbuffer_w, evt, .{}) catch return;
+    ghostty_vt.input.encodeKey(&vt.keyout_buffer_w, evt, .{}) catch return;
     if (vt.outfunc) |outfunc| {
-        const buf = vt.outbuffer_w.buffered();
+        const buf = vt.keyout_buffer_w.buffered();
         outfunc(buf.ptr, buf.len, vt.outdata);
-        _ = vt.outbuffer_w.consumeAll();
+        _ = vt.keyout_buffer_w.consumeAll();
     }
+}
+
+pub export fn vtermz_screen_get_cell(vt: *VTerm, pos: VTermPos, ret: *anyopaque) callconv(.c) c_int {
+    //   ScreenCell *intcell = getcell(screen, pos.row, pos.col);
+    //   if (!intcell) {
+    //     return 0;
+    //   }
+    // TODO: refactor caller so we can actually make use of MultiArrayLists
+    if (pos.row < 0 or pos.row >= vt.rs.row_data.len) return 0;
+    const cell_row: ghostty_vt.RenderState.Row = vt.rs.row_data.get(@intCast(pos.row));
+
+    if (pos.col < 0 or pos.col >= cell_row.cells.len) return 0;
+
+    var vcell: VTermScreenCell = .{};
+    const cell = cell_row.cells.get(@intCast(pos.col));
+
+    const cell_style: ghostty_vt.Style = if (cell.raw.style_id != 0) cell.style else .{};
+
+    //   cell->schar = (intcell->schar == (uint32_t)-1) ? 0 : intcell->schar;
+    switch (cell.raw.content_tag) {
+        .codepoint => vcell.schar = cell.raw.content.codepoint,
+        .codepoint_grapheme => {
+            std.debug.print("ignoring grapheme\n", .{});
+            vcell.schar = 0;
+        }, // TODO: no idea what to do here.
+        .bg_color_palette, .bg_color_rgb => {
+            vcell.schar = 0;
+        },
+    }
+
+    //   cell->attrs.bold = intcell->pen.bold;
+    vcell.attrs.bold = cell_style.flags.bold;
+    //   cell->attrs.underline = intcell->pen.underline;
+    // underlines: enum {
+    //     VTERM_UNDERLINE_OFF,
+    //     VTERM_UNDERLINE_SINGLE,
+    //     VTERM_UNDERLINE_DOUBLE,
+    //     VTERM_UNDERLINE_CURLY,
+    // }
+    const underline = cell_style.flags.underline.cval();
+    if (underline < 4) {
+        vcell.attrs.underline = @intCast(underline);
+    }
+    //   cell->attrs.italic = intcell->pen.italic;
+    vcell.attrs.italic = cell_style.flags.italic;
+    //   cell->attrs.blink = intcell->pen.blink;
+    vcell.attrs.blink = cell_style.flags.blink;
+    //   TODO: make sure this is okay
+    //   cell->attrs.reverse = intcell->pen.reverse ^ screen->global_reverse;
+    vcell.attrs.reverse = cell_style.flags.inverse;
+    // TODO: make sure this is right
+    //   cell->attrs.conceal = intcell->pen.conceal;
+    vcell.attrs.conceal = cell_style.flags.faint;
+    //   cell->attrs.strike = intcell->pen.strike;
+    vcell.attrs.strike = cell_style.flags.strikethrough;
+    //   TODO: no idea what the deal is with font. Are multiple fonts actually supported?
+    //   cell->attrs.font = intcell->pen.font;
+    //   TODO: no idea what the deal is with small
+    //   cell->attrs.small = intcell->pen.small;
+    //   TODO: no idea what the deal is with baseline
+    //   cell->attrs.baseline = intcell->pen.baseline;
+    //   TODO: not sure ghostty supports this
+    //   cell->attrs.dwl = intcell->pen.dwl;
+    //   cell->attrs.dhl = intcell->pen.dhl;
+    vcell.attrs.dwl = false;
+    vcell.attrs.dhl = 0;
+
+    //   cell->fg = intcell->pen.fg;
+    //   cell->bg = intcell->pen.bg;
+    const fg = cell_style.fg(.{ .default = .{}, .palette = &vt.rs.colors.palette, .bold = null });
+    const bg = cell_style.bg(&cell.raw, &vt.rs.colors.palette) orelse vt.rs.colors.background;
+    vcell.fg = .{
+        .rgb = .{
+            .type = 0,
+            .red = fg.r,
+            .green = fg.g,
+            .blue = fg.b,
+        },
+    };
+    vcell.bg = .{
+        .rgb = .{
+            .type = 0,
+            .red = bg.r,
+            .green = bg.g,
+            .blue = bg.b,
+        },
+    };
+
+    c.vterm_screen_cell_setz(&vcell, ret);
+    // const raw_value: u32 = std.math.maxInt(u32);
+    // vcell.attrs = @bitCast(raw_value);
+
+    // TODO: figure out what the deal is what this.
+    //   cell->uri = intcell->pen.uri;
+    //
+    vcell.width = 1;
+    // TODO: figure out what the deal is what this.
+    //   if (pos.col < (screen->cols - 1)
+    //       && getcell(screen, pos.row, pos.col + 1)->schar == (uint32_t)-1) {
+    //     cell->width = 2;
+    //   } else {
+    //     cell->width = 1;
+    //   }
+    //
+    //   return 1;
+    return 1;
 }
 // pub export fn vtermz_keyboard_key(vt: *VTerm, key: VTermKey, mod: VTermModifier) callconv(.c) void {
 //     // vt.s.
@@ -2656,7 +2795,7 @@ pub export fn vtermz_set_utf8(vt: *VTerm, is_utf8: bool) callconv(.c) void {
 
 // DONE
 pub export fn vtermz_state_set_palette_color(vt: *VTerm, index: c_int, col: *const VTermColor) callconv(.c) void {
-    vt.t.colors.palette.set(@intCast(index), .{
+    if (index >= 0 and index < 16) vt.t.colors.palette.set(@intCast(index), .{
         .r = col.rgb.red,
         .g = col.rgb.green,
         .b = col.rgb.blue,

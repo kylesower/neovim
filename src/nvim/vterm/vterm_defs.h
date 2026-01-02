@@ -326,3 +326,5 @@ typedef struct {
   schar_T schar;
   ScreenPen pen;
 } ScreenCell;
+
+void vterm_screen_cell_setz(void *srcz, void *dstc);

@@ -2093,6 +2093,8 @@ static bool fetch_cell(Terminal *term, int row, int col, VTermScreenCell *cell)
   } else {
     vterm_screen_get_cell(term->vts, (VTermPos){ .row = row, .col = col },
                           cell);
+    vtermz_screen_get_cell(term->vtz, (VTermPos){ .row = row, .col = col },
+                          cell);
   }
   return true;
 }
@@ -2125,6 +2127,7 @@ static void refresh_terminal(Terminal *term)
   }
   linenr_T ml_before = buf->b_ml.ml_line_count;
 
+  vtermz_refresh(term->vtz);
   refresh_size(term, buf);
   refresh_scrollback(term, buf);
   refresh_screen(term, buf);
