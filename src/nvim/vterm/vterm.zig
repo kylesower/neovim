@@ -2533,9 +2533,9 @@ pub export fn vtermz_set_size(vt: *VTerm, rows: c_int, cols: c_int) callconv(.c)
 // DONE
 pub export fn vtermz_set_utf8(vt: *VTerm, is_utf8: bool) callconv(.c) void {
     vt.t.configureCharset(.G0, if (is_utf8) .utf8 else .ascii);
-    vt.t.configureCharset(.G1, if (is_utf8) .utf8 else .ascii);
-    vt.t.configureCharset(.G2, if (is_utf8) .utf8 else .ascii);
-    vt.t.configureCharset(.G3, if (is_utf8) .utf8 else .ascii);
+    // vt.t.configureCharset(.G1, if (is_utf8) .utf8 else .ascii);
+    // vt.t.configureCharset(.G2, if (is_utf8) .utf8 else .ascii);
+    // vt.t.configureCharset(.G3, if (is_utf8) .utf8 else .ascii);
 }
 
 // DONE
