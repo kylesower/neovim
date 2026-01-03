@@ -406,6 +406,20 @@ static int on_dcs(const char *command, size_t commandlen, VTermStringFragment fr
   return 1;
 }
 
+// static int on_dcsz(VTermZOscColor osc, void *user) {
+//   Terminal *term = user;
+//
+//   if (has_event(EVENT_TERMREQUEST)) {
+//     term->termrequest_terminator = (VTermTerminator)osc.terminator;
+//     kv_size(term->termrequest_buffer) = 0;
+//     kv_printf(term->termrequest_buffer, "\x1b]%d;", osc.command);
+//     kv_concat_len(term->termrequest_buffer, osc.buf, osc.len);
+//     schedule_termrequest(term);
+//   }
+//
+//   return 1;
+// }
+
 static int on_apc(VTermStringFragment frag, void *user)
 {
   Terminal *term = user;
@@ -429,24 +443,26 @@ static int on_apc(VTermStringFragment frag, void *user)
   return 1;
 }
 
-// static VTermStateFallbacks vterm_fallbacks = {
-//   .control = NULL,
-//   .csi = NULL,
-//   .osc = on_osc,
-//   .dcs = on_dcs,
-//   .apc = on_apc,
-//   .pm = NULL,
-//   .sos = NULL,
-// };
 static VTermStateFallbacks vterm_fallbacks = {
   .control = NULL,
   .csi = NULL,
+  // TODO: determine dynamically
+  // .osc = on_osc,
   .osc = NULL,
-  .dcs = NULL,
-  .apc = NULL,
+  .dcs = on_dcs,
+  .apc = on_apc,
   .pm = NULL,
   .sos = NULL,
 };
+// static VTermStateFallbacks vterm_fallbacks = {
+//   .control = NULL,
+//   .csi = NULL,
+//   .osc = NULL,
+//   .dcs = NULL,
+//   .apc = NULL,
+//   .pm = NULL,
+//   .sos = NULL,
+// };
 
 void terminal_init(void)
 {

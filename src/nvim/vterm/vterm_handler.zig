@@ -502,7 +502,19 @@ pub const Handler = struct {
                 },
 
                 // TODO: bufw print query
-                .query,
+                .query => |value| {
+                    switch (value) {
+                        .palette => |idx| bufw.print(
+                            ";{};?",
+                            .{idx},
+                        ) catch {},
+                        .special => |sp| bufw.print(
+                            ";{};?",
+                            .{sp.osc4()},
+                        ) catch {},
+                        .dynamic => bufw.print(";?", .{}) catch {},
+                    }
+                },
                 .reset_special,
                 => {},
             }
@@ -513,10 +525,9 @@ pub const Handler = struct {
             // Skip the leading semicolon
             osc.buf = written[1..].ptr;
             osc.len = written[1..].len;
-        }
-
-        if (self.callbacks.osc_color) |on_osc_color| {
-            _ = on_osc_color(osc, self.cbdata);
+            if (self.callbacks.osc_color) |on_osc_color| {
+                _ = on_osc_color(osc, self.cbdata);
+            }
         }
     }
 
