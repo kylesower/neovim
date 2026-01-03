@@ -9,6 +9,18 @@
 
 typedef struct VTermZ VTermZ;
 
+typedef enum {
+  VTERMZ_TERMINATOR_BEL,  // \x07
+  VTERMZ_TERMINATOR_ST,  // \x1b\x5c
+} VTermZTerminator;
+
+typedef struct {
+  int command;  // 4 for palette colors, 10 for FG, 11 for BG, 12 for cursor
+  char *buf; // If command is 4, the colors being queried
+  size_t len;
+  VTermZTerminator terminator; // The terminator used in the original request
+} VTermZOscColor;
+
 typedef struct {
   // TODO: do we need these other callbacks?
   // int (*damage)(VTermRect rect, void *user);
@@ -17,10 +29,12 @@ typedef struct {
   int (*settermprop)(VTermProp prop, VTermValue *val, void *user);
   int (*bell)(void *user);
   int (*theme)(bool *dark, void *user);
+  int (*osc_color)(VTermZOscColor osc, void *user);
   // int (*sb_pushline)(int cols, const VTermScreenCell *cells, void *user);
   // int (*sb_popline)(int cols, VTermScreenCell *cells, void *user);
   // int (*sb_clear)(void *user);
 } VTermZCallbacks;
+
 
 VTermZ *vtermz_new(int rows, int cols);
 void vtermz_free(VTermZ *vt);

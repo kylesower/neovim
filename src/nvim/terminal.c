@@ -224,6 +224,7 @@ static VTermZCallbacks vtermz_screen_callbacks = {
   .settermprop = term_settermprop,
   .bell = term_bell,
   .theme = term_theme,
+  .osc_color = on_osc_color,
 };
 
 static VTermSelectionCallbacks vterm_selection_callbacks = {
@@ -368,6 +369,20 @@ static int on_osc(int command, VTermStringFragment frag, void *user)
   return 1;
 }
 
+static int on_osc_color(VTermZOscColor osc, void *user) {
+  Terminal *term = user;
+
+  if (has_event(EVENT_TERMREQUEST)) {
+    term->termrequest_terminator = (VTermTerminator)osc.terminator;
+    kv_size(term->termrequest_buffer) = 0;
+    kv_printf(term->termrequest_buffer, "\x1b]%d;", osc.command);
+    kv_concat_len(term->termrequest_buffer, osc.buf, osc.len);
+    schedule_termrequest(term);
+  }
+
+  return 1;
+}
+
 static int on_dcs(const char *command, size_t commandlen, VTermStringFragment frag, void *user)
 {
   Terminal *term = user;
@@ -480,6 +495,7 @@ void terminal_open(Terminal **termpp, buf_T *buf, TerminalOptions opts)
   vterm_screen_enable_reflow(term->vts, true);
   // delete empty lines at the end of the buffer
   vterm_screen_set_callbacks(term->vts, &vterm_screen_callbacks, term);
+  // TODO: set this at comptime based on vterm implementation
   vtermz_screen_set_callbacks(term->vtz, &vtermz_screen_callbacks, term);
   vterm_screen_set_unrecognised_fallbacks(term->vts, &vterm_fallbacks, term);
   vterm_screen_set_damage_merge(term->vts, VTERM_DAMAGE_SCROLL);

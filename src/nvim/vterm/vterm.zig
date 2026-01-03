@@ -28,6 +28,7 @@ pub const c = @cImport({
     @cInclude("nvim/vterm/screen.h");
     @cInclude("nvim/vterm/state.h");
     @cInclude("nvim/vterm/vterm.h");
+    @cInclude("nvim/vterm/vtermz.h");
 });
 const std = @import("std");
 const ghostty_vt = @import("ghostty-vt");

@@ -28,6 +28,7 @@ const testing = std.testing;
 const ghostty_vt = @import("ghostty-vt");
 const vterm = @import("vterm.zig");
 const log = @import("log.zig");
+const c = vterm.c;
 const VTermPos = vterm.VTermPos;
 const VTermProp = vterm.VTermProp;
 const VTermValue = vterm.VTermValue;
@@ -221,7 +222,9 @@ pub const Handler = struct {
             .decaln => try self.terminal.decaln(),
             .full_reset => self.terminal.fullReset(),
             .start_hyperlink => try self.terminal.screens.active.startHyperlink(value.uri, value.id),
-            .end_hyperlink => self.terminal.screens.active.endHyperlink(),
+            .end_hyperlink => {
+                self.terminal.screens.active.endHyperlink();
+            },
             .prompt_start => {
                 self.terminal.screens.active.cursor.page_row.semantic_prompt = .prompt;
                 self.terminal.flags.shell_redraws_prompt = value.redraw;
@@ -231,7 +234,7 @@ pub const Handler = struct {
             .end_of_input => self.terminal.markSemanticPrompt(.command),
             .end_of_command => self.terminal.screens.active.cursor.page_row.semantic_prompt = .input,
             .mouse_shape => self.terminal.mouse_shape = value,
-            .color_operation => try self.colorOperation(value.op, &value.requests),
+            .color_operation => try self.colorOperation(value.op, &value.requests, value.terminator),
             .kitty_color_report => try self.kittyColorOperation(value),
 
             // No supported DCS commands have any terminal-modifying effects,
@@ -249,7 +252,7 @@ pub const Handler = struct {
             => {},
 
             // Have no terminal-modifying effect
-            .bell,
+            .bell => _ = if (self.callbacks.bell) |bell| bell(self.cbdata),
             .enquiry,
             .request_mode,
             .request_mode_unknown,
@@ -373,9 +376,50 @@ pub const Handler = struct {
         self: *Handler,
         op: osc_color.Operation,
         requests: *const osc_color.List,
+        terminator: ghostty_vt.osc.Terminator,
     ) !void {
-        _ = op;
         if (requests.count() == 0) return;
+        const command: c_int = switch (op) {
+            .osc_4 => 4,
+            .osc_5 => 5,
+            .osc_10 => 10,
+            .osc_11 => 11,
+            .osc_12 => 12,
+            .osc_13 => 13,
+            .osc_14 => 14,
+            .osc_15 => 15,
+            .osc_16 => 16,
+            .osc_17 => 17,
+            .osc_18 => 18,
+            .osc_19 => 19,
+            .osc_104 => 104,
+            .osc_105 => 105,
+            .osc_110 => 110,
+            .osc_111 => 111,
+            .osc_112 => 112,
+            .osc_113 => 113,
+            .osc_114 => 114,
+            .osc_115 => 115,
+            .osc_116 => 116,
+            .osc_117 => 117,
+            .osc_118 => 118,
+            .osc_119 => 119,
+        };
+
+        const cterminator: c_uint = switch (terminator) {
+            .st => c.VTERM_TERMINATOR_ST,
+            .bel => c.VTERM_TERMINATOR_BEL,
+        };
+
+        var buf: [1024]u8 = undefined;
+
+        var osc: VTermZOscColor = .{
+            .command = command,
+            .buf = &buf,
+            .len = 0,
+            .terminator = cterminator,
+        };
+        var bufw = std.Io.Writer.fixed(&buf);
 
         var it = requests.constIterator(0);
         while (it.next()) |req| {
@@ -385,11 +429,33 @@ pub const Handler = struct {
                         .palette => |i| {
                             self.terminal.flags.dirty.palette = true;
                             self.terminal.colors.palette.set(i, set.color);
+                            bufw.print(
+                                ";{};rgb:{x}/{x}/{x}",
+                                .{ i, set.color.r, set.color.g, set.color.b },
+                            ) catch {};
                         },
                         .dynamic => |dynamic| switch (dynamic) {
-                            .foreground => self.terminal.colors.foreground.set(set.color),
-                            .background => self.terminal.colors.background.set(set.color),
-                            .cursor => self.terminal.colors.cursor.set(set.color),
+                            .foreground => {
+                                self.terminal.colors.foreground.set(set.color);
+                                bufw.print(
+                                    ";rgb:{x}/{x}/{x}",
+                                    .{ set.color.r, set.color.g, set.color.b },
+                                ) catch {};
+                            },
+                            .background => {
+                                self.terminal.colors.background.set(set.color);
+                                bufw.print(
+                                    ";rgb:{x}/{x}/{x}",
+                                    .{ set.color.r, set.color.g, set.color.b },
+                                ) catch {};
+                            },
+                            .cursor => {
+                                self.terminal.colors.cursor.set(set.color);
+                                bufw.print(
+                                    ";rgb:{x}/{x}/{x}",
+                                    .{ set.color.r, set.color.g, set.color.b },
+                                ) catch {};
+                            },
                             .pointer_foreground,
                             .pointer_background,
                             .tektronix_foreground,
@@ -403,6 +469,7 @@ pub const Handler = struct {
                     }
                 },
 
+                // TODO: bufw print these.
                 .reset => |target| switch (target) {
                     .palette => |i| {
                         self.terminal.flags.dirty.palette = true;
@@ -434,10 +501,22 @@ pub const Handler = struct {
                     mask.* = .initEmpty();
                 },
 
+                // TODO: bufw print query
                 .query,
                 .reset_special,
                 => {},
             }
+        }
+
+        const written = bufw.buffered();
+        if (written.len > 0) {
+            // Skip the leading semicolon
+            osc.buf = written[1..].ptr;
+            osc.len = written[1..].len;
+        }
+
+        if (self.callbacks.osc_color) |on_osc_color| {
+            _ = on_osc_color(osc, self.cbdata);
         }
     }
 
@@ -490,6 +569,19 @@ pub const Handler = struct {
     }
 };
 
+// typedef struct {
+//   int command;  // 4 for palette colors, 10 for FG, 11 for BG, 12 for cursor
+//   char *buf; // If command is 4, the colors being queried
+//   size_t len;
+//   VTermZTerminator terminator; // The terminator used in the original request
+// } VTermZOscColor;
+const VTermZOscColor = extern struct {
+    command: c_int,
+    buf: [*]u8,
+    len: usize = 0,
+    terminator: c.VTermZTerminator,
+};
+
 pub const VTermZCallbacks = extern struct {
     // damage: ?*const fn (rect: VTermRect, user: *anyopaque) callconv(.c) c_int,
     // moverect: ?*const fn (dest: VTermRect, src: VTermRect, user: *anyopaque) callconv(.c) c_int,
@@ -505,6 +597,7 @@ pub const VTermZCallbacks = extern struct {
     ) callconv(.c) c_int = null,
     bell: ?*const fn (user: ?*anyopaque) callconv(.c) c_int = null,
     theme: ?*const fn (dark: *bool, user: ?*anyopaque) callconv(.c) c_int = null,
+    osc_color: ?*const fn (osc: VTermZOscColor, user: ?*anyopaque) callconv(.c) c_int = null,
     // sb_pushline: ?*const fn (
     //     cols: c_int,
     //     cells: [*]const VTermScreenCell,
