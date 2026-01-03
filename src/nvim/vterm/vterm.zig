@@ -1875,8 +1875,23 @@ pub export fn vtermz_teardown() callconv(.c) void {
     _ = gpa.deinit();
 }
 
+// fn bytes_hex_leak(vt: *VTerm, bytes: []const u8) []u8 {
+//     var buf = vt.allocator.alloc(u8, bytes.len * 3) catch @panic("oom");
+//     var idx: usize = 0;
+//     for (bytes) |b| {
+//         const digits = std.fmt.hex(b);
+//         buf[idx] = digits[0];
+//         buf[idx + 1] = digits[1];
+//         buf[idx + 2] = ' ';
+//         idx += 3;
+//     }
+//
+//     return buf[0 .. @max(1, idx) - 1];
+// }
+
 pub export fn vtermz_input_write(vt: *VTerm, bytes: [*]const u8, len: usize) callconv(.c) usize {
     // TODO: handle errors
+    // log.warn(@src(), "writing input to term: {s}", .{bytes_hex_leak(vt, bytes[0..len])});
     vt.s.nextSlice(bytes[0..len]) catch {};
     return 0;
 }
@@ -2302,26 +2317,39 @@ pub export fn vtermz_screen_get_cell(vt: *VTerm, pos: VTermPos, ret: *anyopaque)
     switch (cell.raw.content_tag) {
         .codepoint => {
             const codepoint = cell.raw.content.codepoint;
-            const len = std.unicode.utf8CodepointSequenceLength(codepoint) catch |err| switch (err) {
-                error.CodepointTooLarge => return 0,
-            };
-            if (len > 1) {
-                var buf: [4]u8 = undefined;
-                _ = std.unicode.utf8Encode(codepoint, &buf) catch return 0;
-                vcell.schar = std.mem.bytesToValue(u32, &buf);
-            } else {
-                @branchHint(.likely);
-                vcell.schar = codepoint;
-            }
-            // TODO: set width with utf_ptr2cells_len?
+            // log.warn(@src(), "starting to process single codepoint", .{});
+            // if (len > 1) {
+            var buf: [4]u8 = undefined;
+            const len = std.unicode.utf8Encode(codepoint, &buf) catch return 0;
+            // vcell.schar = std.mem.bytesToValue(u32, &buf[0..len]);
+            vcell.schar = c.schar_from_buf(&buf, len);
+            // log.warn(@src(), "vcell grapheme u21: {s}, vcell grapheme: {s}, width: {}", .{ bytes_hex_leak(vt, buf[0..len]), buf[0..len], cell.raw.gridWidth() });
+            // } else {
+            //     @branchHint(.likely);
+            //     vcell.schar = codepoint;
+            //     if (codepoint == 0x00) {
+            //         log.warn(@src(), "got null codepoint. skipping.", .{});
+            //     } else {
+            //         log.warn(@src(), "vcell single grapheme: {c}, width: {}", .{ @as(u8, @intCast(codepoint)), cell.raw.gridWidth() });
+            //     }
+            // }
+            // log.warn(@src(), "finished processing single codepoint", .{});
         },
         .codepoint_grapheme => {
             // TODO: handle links.
             var buf: [c.MAX_SCHAR_SIZE]u8 = undefined;
             var idx: usize = 0;
+            // log.warn(@src(), "starting to process grapheme cluster of len {d}", .{cell.grapheme.len});
+            // cell.raw.content.codepoint is the first codepoint in the cluster. The
+            // remainder are stored in cell.grapheme.
+            idx += std.unicode.utf8Encode(cell.raw.content.codepoint, &buf) catch return 0;
             for (cell.grapheme) |g| {
+                // log.warn(@src(), "processing grapheme: {d}", .{g});
+                // if (g == 8205) log.warn(@src(), "got ZWJ in graheme cluster.", .{});
                 idx += std.unicode.utf8Encode(g, buf[idx..]) catch return 0;
             }
+            // log.warn(@src(), "vcell grapheme raw: {s}, vcell grapheme: {s}, width: {}", .{ bytes_hex_leak(vt, buf[0..idx]), buf[0..idx], cell.raw.gridWidth() });
+            // log.warn(@src(), "finished processing grapheme cluster", .{});
             vcell.schar = c.schar_from_buf(&buf, idx);
         },
         .bg_color_palette, .bg_color_rgb => {
@@ -2369,6 +2397,8 @@ pub export fn vtermz_screen_get_cell(vt: *VTerm, pos: VTermPos, ret: *anyopaque)
     vcell.attrs.dwl = false;
     vcell.attrs.dhl = 0;
 
+    vcell.width = cell.raw.gridWidth();
+
     //   cell->fg = intcell->pen.fg;
     //   cell->bg = intcell->pen.bg;
     const fg, const bg = vcell_fg_bg_from_cell(vt, cell);
@@ -2385,7 +2415,7 @@ pub export fn vtermz_screen_get_cell(vt: *VTerm, pos: VTermPos, ret: *anyopaque)
     // TODO: figure out what the deal is what this.
     //   cell->uri = intcell->pen.uri;
     //
-    vcell.width = 1;
+    // vcell.width = 1;
     // TODO: figure out what the deal is what this.
     //   if (pos.col < (screen->cols - 1)
     //       && getcell(screen, pos.row, pos.col + 1)->schar == (uint32_t)-1) {
@@ -2393,13 +2423,13 @@ pub export fn vtermz_screen_get_cell(vt: *VTerm, pos: VTermPos, ret: *anyopaque)
     //   } else {
     //     cell->width = 1;
     //   }
-    if (pos.col < vt.t.cols - 1) {
-        const adj = cell_row.cells.get(@intCast(pos.col + 1));
-        _ = adj;
-        // if (adj.raw.content_tag == .codepoint and adj.raw.content.codepoint == '\\') {
-        //     vcell.width = 2;
-        // }
-    }
+    // if (pos.col < vt.t.cols - 1) {
+    //     const adj = cell_row.cells.get(@intCast(pos.col + 1));
+    //     _ = adj;
+    //     // if (adj.raw.content_tag == .codepoint and adj.raw.content.codepoint == '\\') {
+    //     //     vcell.width = 2;
+    //     // }
+    // }
     // TODO: figure out why cells with spaces don't have the same colors as libvterm.
     // This typically sets them to have the default fg/bg, whereas libvterm seems to use rgb
     // colors.
@@ -2422,7 +2452,9 @@ pub export fn vtermz_screen_get_cell(vt: *VTerm, pos: VTermPos, ret: *anyopaque)
     //         std.debug.print("adj bg ind: {}\n", .{adj_bg.indexed.idx});
     //     }
     // }
+
     c.vterm_screen_cell_setz(&vcell, ret);
+
     //
     //   return 1;
     return 1;
@@ -2501,6 +2533,9 @@ pub export fn vtermz_set_size(vt: *VTerm, rows: c_int, cols: c_int) callconv(.c)
 // DONE
 pub export fn vtermz_set_utf8(vt: *VTerm, is_utf8: bool) callconv(.c) void {
     vt.t.configureCharset(.G0, if (is_utf8) .utf8 else .ascii);
+    vt.t.configureCharset(.G1, if (is_utf8) .utf8 else .ascii);
+    vt.t.configureCharset(.G2, if (is_utf8) .utf8 else .ascii);
+    vt.t.configureCharset(.G3, if (is_utf8) .utf8 else .ascii);
 }
 
 // DONE

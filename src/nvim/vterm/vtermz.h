@@ -35,7 +35,6 @@ typedef struct {
   // int (*sb_clear)(void *user);
 } VTermZCallbacks;
 
-
 VTermZ *vtermz_new(int rows, int cols);
 void vtermz_free(VTermZ *vt);
 void vtermz_print(VTermZ *vt);

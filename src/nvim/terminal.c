@@ -429,12 +429,21 @@ static int on_apc(VTermStringFragment frag, void *user)
   return 1;
 }
 
+// static VTermStateFallbacks vterm_fallbacks = {
+//   .control = NULL,
+//   .csi = NULL,
+//   .osc = on_osc,
+//   .dcs = on_dcs,
+//   .apc = on_apc,
+//   .pm = NULL,
+//   .sos = NULL,
+// };
 static VTermStateFallbacks vterm_fallbacks = {
   .control = NULL,
   .csi = NULL,
-  .osc = on_osc,
-  .dcs = on_dcs,
-  .apc = on_apc,
+  .osc = NULL,
+  .dcs = NULL,
+  .apc = NULL,
   .pm = NULL,
   .sos = NULL,
 };

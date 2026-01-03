@@ -1155,7 +1155,7 @@ void vterm_screen_cell_setz(void *srcz, void *dstc) {
   dst->schar            = src->schar;
   dst->uri              = src->uri;
   // TODO: figure out how this works.
-  // dst->width            = src->width;
+  dst->width            = src->width;
   dst->fg               = src->fg;
   dst-> bg              = src->bg;
   dst->attrs.bold       = src->attrs.bold;
