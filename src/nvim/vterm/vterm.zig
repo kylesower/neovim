@@ -762,28 +762,28 @@ pub const VTermScreenCell = extern struct {
 // //
 // //   VTERM_N_PROPS,
 // // } VTermProp;
-// pub const VTermProp = enum(u8) {
-//     // VTERM_PROP_NONE = 0
-//     cursorvisible = 1, // bool
-//     cursorblink, // bool
-//     altscreen, // bool
-//     title, // string
-//     iconname, // string
-//     reverse, // bool
-//     cursorshape, // number
-//     mouse, // number
-//     focusreport, // bool
-//     themeupdates, // bool
-// };
+pub const VTermProp = enum(u8) {
+    // VTERM_PROP_NONE = 0
+    cursorvisible = 1, // bool
+    cursorblink, // bool
+    altscreen, // bool
+    title, // string
+    iconname, // string
+    reverse, // bool
+    cursorshape, // number
+    mouse, // number
+    focusreport, // bool
+    themeupdates, // bool
+};
 //
 // // typedef enum {
 // //   VTERM_TERMINATOR_BEL,  // \x07
 // //   VTERM_TERMINATOR_ST,  // \x1b\x5c
 // // } VTermTerminator;
-// pub const VTermTerminator = enum(u8) {
-//     bel,
-//     st,
-// };
+pub const VTermTerminator = enum(u8) {
+    bel,
+    st,
+};
 //
 // // typedef struct {
 // //   const char *str;
@@ -793,13 +793,13 @@ pub const VTermScreenCell = extern struct {
 // //   VTermTerminator terminator;
 // // } VTermStringFragment;
 // // Sorry, this struct isn't packed nicely...
-// pub const VTermStringFragment = extern struct {
-//     str: [*]u8,
-//     len: u32,
-//     initial: bool,
-//     final: bool,
-//     terminator: VTermTerminator,
-// };
+pub const VTermStringFragment = extern struct {
+    str: [*]u8,
+    len: u32,
+    initial: bool,
+    final: bool,
+    terminator: VTermTerminator,
+};
 //
 // // typedef union {
 // //   int boolean;
@@ -807,12 +807,12 @@ pub const VTermScreenCell = extern struct {
 // //   VTermStringFragment string;
 // //   VTermColor color;
 // // } VTermValue;
-// pub const VTermValue = extern union {
-//     boolean: c_int,
-//     number: c_int,
-//     string: VTermStringFragment,
-//     color: VTermColor,
-// };
+pub const VTermValue = extern union {
+    boolean: c_int,
+    number: c_int,
+    string: VTermStringFragment,
+    color: VTermColor,
+};
 // //
 // // typedef struct {
 // //   int (*damage)(VTermRect rect, void *user);
@@ -827,33 +827,33 @@ pub const VTermScreenCell = extern struct {
 // //   int (*sb_clear)(void *user);
 // // } VTermScreenCallbacks;
 // pub const VTermScreenCallbacks = extern struct {
-//     damage: *const fn (rect: VTermRect, user: *anyopaque) callconv(.c) c_int,
-//     moverect: *const fn (dest: VTermRect, src: VTermRect, user: *anyopaque) callconv(.c) c_int,
-//     movecursor: *const fn (
+//     damage: ?*const fn (rect: VTermRect, user: *anyopaque) callconv(.c) c_int,
+//     moverect: ?*const fn (dest: VTermRect, src: VTermRect, user: *anyopaque) callconv(.c) c_int,
+//     movecursor: ?*const fn (
 //         pos: VTermPos,
 //         oldpos: VTermPos,
 //         visible: c_int,
 //         user: *anyopaque,
 //     ) callconv(.c) c_int,
-//     settermprop: *const fn (
+//     settermprop: ?*const fn (
 //         prop: VTermProp,
 //         val: *VTermValue,
 //         user: *anyopaque,
 //     ) callconv(.c) c_int,
-//     bell: *const fn (user: *anyopaque) callconv(.c) c_int,
-//     resize: *const fn (rows: c_int, cols: c_int, user: *anyopaque) callconv(.c) c_int,
-//     theme: *const fn (dark: *bool, user: *anyopaque) callconv(.c) c_int,
-//     sb_pushline: *const fn (
+//     bell: ?*const fn (user: *anyopaque) callconv(.c) c_int,
+//     resize: ?*const fn (rows: c_int, cols: c_int, user: *anyopaque) callconv(.c) c_int,
+//     theme: ?*const fn (dark: *bool, user: *anyopaque) callconv(.c) c_int,
+//     sb_pushline: ?*const fn (
 //         cols: c_int,
 //         cells: [*]const VTermScreenCell,
 //         user: *anyopaque,
 //     ) callconv(.c) c_int,
-//     sb_popline: *const fn (
+//     sb_popline: ?*const fn (
 //         cols: c_int,
 //         cells: [*]VTermScreenCell,
 //         user: *anyopaque,
 //     ) callconv(.c) c_int,
-//     sb_clear: *const fn (user: *anyopaque) callconv(.c) c_int,
+//     sb_clear: ?*const fn (user: *anyopaque) callconv(.c) c_int,
 // };
 //
 // // typedef struct {
@@ -1902,6 +1902,11 @@ pub export fn vtermz_output_set_callback(
 ) callconv(.c) void {
     vt.outfunc = func;
     vt.outdata = user;
+}
+
+pub export fn vtermz_screen_set_callbacks(vt: *VTerm, callbacks: *const vterm_handler.VTermZCallbacks, user: *anyopaque) callconv(.c) void {
+    vt.s.handler.callbacks = callbacks.*;
+    vt.s.handler.cbdata = user;
 }
 
 // void vterm_push_output_bytes(VTerm *vt, const char *bytes, size_t len)

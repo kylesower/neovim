@@ -219,6 +219,13 @@ static VTermScreenCallbacks vterm_screen_callbacks = {
   .sb_popline = term_sb_pop,
 };
 
+static VTermZCallbacks vtermz_screen_callbacks = {
+  .movecursor = term_movecursorz,
+  .settermprop = term_settermprop,
+  .bell = term_bell,
+  .theme = term_theme,
+};
+
 static VTermSelectionCallbacks vterm_selection_callbacks = {
   .set = term_selection_set,
   // For security reasons we don't support querying the system clipboard from the embedded terminal
@@ -473,6 +480,7 @@ void terminal_open(Terminal **termpp, buf_T *buf, TerminalOptions opts)
   vterm_screen_enable_reflow(term->vts, true);
   // delete empty lines at the end of the buffer
   vterm_screen_set_callbacks(term->vts, &vterm_screen_callbacks, term);
+  vtermz_screen_set_callbacks(term->vtz, &vtermz_screen_callbacks, term);
   vterm_screen_set_unrecognised_fallbacks(term->vts, &vterm_fallbacks, term);
   vterm_screen_set_damage_merge(term->vts, VTERM_DAMAGE_SCROLL);
   vterm_screen_reset(term->vts, 1);
@@ -1353,9 +1361,19 @@ static int term_moverect(VTermRect dest, VTermRect src, void *data)
 
 static int term_movecursor(VTermPos new_pos, VTermPos old_pos, int visible, void *data)
 {
+  return 0;
+  // Terminal *term = data;
+  // term->cursor.row = new_pos.row;
+  // term->cursor.col = new_pos.col;
+  // invalidate_terminal(term, -1, -1);
+  // return 1;
+}
+
+static int term_movecursorz(int row, int col, void *data)
+{
   Terminal *term = data;
-  term->cursor.row = new_pos.row;
-  term->cursor.col = new_pos.col;
+  term->cursor.row = row;
+  term->cursor.col = col;
   invalidate_terminal(term, -1, -1);
   return 1;
 }

@@ -26,6 +26,11 @@
 const std = @import("std");
 const testing = std.testing;
 const ghostty_vt = @import("ghostty-vt");
+const vterm = @import("vterm.zig");
+const log = @import("log.zig");
+const VTermPos = vterm.VTermPos;
+const VTermProp = vterm.VTermProp;
+const VTermValue = vterm.VTermValue;
 const Action = ghostty_vt.StreamAction;
 const Screen = ghostty_vt.Screen;
 // const modes = @import("modes.zig");
@@ -58,6 +63,8 @@ pub const Stream = ghostty_vt.Stream(Handler);
 pub const Handler = struct {
     /// The terminal state to modify.
     terminal: *Terminal,
+    callbacks: VTermZCallbacks = .{},
+    cbdata: ?*anyopaque = null,
     allocator: Allocator,
 
     pub fn init(terminal: *Terminal, allocator: Allocator) Handler {
@@ -90,21 +97,48 @@ pub const Handler = struct {
                 self.terminal.carriageReturn();
             },
             .reverse_index => self.terminal.reverseIndex(),
-            .cursor_up => self.terminal.cursorUp(value.value),
-            .cursor_down => self.terminal.cursorDown(value.value),
-            .cursor_left => self.terminal.cursorLeft(value.value),
-            .cursor_right => self.terminal.cursorRight(value.value),
-            .cursor_pos => self.terminal.setCursorPos(value.row, value.col),
-            .cursor_col => self.terminal.setCursorPos(self.terminal.screens.active.cursor.y + 1, value.value),
-            .cursor_row => self.terminal.setCursorPos(value.value, self.terminal.screens.active.cursor.x + 1),
-            .cursor_col_relative => self.terminal.setCursorPos(
-                self.terminal.screens.active.cursor.y + 1,
-                self.terminal.screens.active.cursor.x + 1 +| value.value,
-            ),
-            .cursor_row_relative => self.terminal.setCursorPos(
-                self.terminal.screens.active.cursor.y + 1 +| value.value,
-                self.terminal.screens.active.cursor.x + 1,
-            ),
+            .cursor_up => {
+                self.terminal.cursorUp(value.value);
+                self.cbMoveCursor();
+            },
+            .cursor_down => {
+                self.terminal.cursorDown(value.value);
+                self.cbMoveCursor();
+            },
+            .cursor_left => {
+                self.terminal.cursorLeft(value.value);
+                self.cbMoveCursor();
+            },
+            .cursor_right => {
+                self.terminal.cursorRight(value.value);
+                self.cbMoveCursor();
+            },
+            .cursor_pos => {
+                self.terminal.setCursorPos(value.row, value.col);
+                self.cbMoveCursor();
+            },
+            .cursor_col => {
+                self.terminal.setCursorPos(self.terminal.screens.active.cursor.y + 1, value.value);
+                self.cbMoveCursor();
+            },
+            .cursor_row => {
+                self.terminal.setCursorPos(value.value, self.terminal.screens.active.cursor.x + 1);
+                self.cbMoveCursor();
+            },
+            .cursor_col_relative => {
+                self.terminal.setCursorPos(
+                    self.terminal.screens.active.cursor.y + 1,
+                    self.terminal.screens.active.cursor.x + 1 +| value.value,
+                );
+                self.cbMoveCursor();
+            },
+            .cursor_row_relative => {
+                self.terminal.setCursorPos(
+                    self.terminal.screens.active.cursor.y + 1 +| value.value,
+                    self.terminal.screens.active.cursor.x + 1,
+                );
+                self.cbMoveCursor();
+            },
             .cursor_style => {
                 const blink = switch (value) {
                     .default, .steady_block, .steady_bar, .steady_underline => false,
@@ -157,7 +191,10 @@ pub const Handler = struct {
                 }
             },
             .save_cursor => self.terminal.saveCursor(),
-            .restore_cursor => try self.terminal.restoreCursor(),
+            .restore_cursor => {
+                try self.terminal.restoreCursor();
+                self.cbMoveCursor();
+            },
             .invoke_charset => self.terminal.invokeCharset(value.bank, value.charset, value.locking),
             .configure_charset => self.terminal.configureCharset(value.slot, value.charset),
             .set_attribute => switch (value) {
@@ -238,6 +275,7 @@ pub const Handler = struct {
             try self.terminal.horizontalTab();
             if (x == self.terminal.screens.active.cursor.x) break;
         }
+        self.cbMoveCursor();
     }
 
     inline fn horizontalTabBack(self: *Handler, count: u16) !void {
@@ -246,6 +284,7 @@ pub const Handler = struct {
             try self.terminal.horizontalTabBack();
             if (x == self.terminal.screens.active.cursor.x) break;
         }
+        self.cbMoveCursor();
     }
 
     fn setMode(self: *Handler, mode: modes.Mode, enabled: bool) !void {
@@ -258,7 +297,10 @@ pub const Handler = struct {
             .reverse_colors,
             => {},
 
-            .origin => self.terminal.setCursorPos(1, 1),
+            .origin => {
+                self.terminal.setCursorPos(1, 1);
+                self.cbMoveCursor();
+            },
 
             .enable_left_and_right_margin => if (!enabled) {
                 self.terminal.scrolling_region.left = 0;
@@ -273,6 +315,7 @@ pub const Handler = struct {
                 self.terminal.saveCursor();
             } else {
                 try self.terminal.restoreCursor();
+                self.cbMoveCursor();
             },
 
             .enable_mode_3 => {},
@@ -432,6 +475,47 @@ pub const Handler = struct {
             }
         }
     }
+
+    fn cbMoveCursor(self: *Handler) void {
+        if (self.callbacks.movecursor) |movecursor| {
+            const x = self.terminal.screens.active.cursor.x;
+            const y = self.terminal.screens.active.cursor.y;
+            _ = movecursor(
+                y,
+                x,
+
+                self.cbdata,
+            );
+        }
+    }
+};
+
+pub const VTermZCallbacks = extern struct {
+    // damage: ?*const fn (rect: VTermRect, user: *anyopaque) callconv(.c) c_int,
+    // moverect: ?*const fn (dest: VTermRect, src: VTermRect, user: *anyopaque) callconv(.c) c_int,
+    movecursor: ?*const fn (
+        row: c_int,
+        col: c_int,
+        user: ?*anyopaque,
+    ) callconv(.c) c_int = null,
+    settermprop: ?*const fn (
+        prop: VTermProp,
+        val: *VTermValue,
+        user: ?*anyopaque,
+    ) callconv(.c) c_int = null,
+    bell: ?*const fn (user: ?*anyopaque) callconv(.c) c_int = null,
+    theme: ?*const fn (dark: *bool, user: ?*anyopaque) callconv(.c) c_int = null,
+    // sb_pushline: ?*const fn (
+    //     cols: c_int,
+    //     cells: [*]const VTermScreenCell,
+    //     user: *anyopaque,
+    // ) callconv(.c) c_int,
+    // sb_popline: ?*const fn (
+    //     cols: c_int,
+    //     cells: [*]VTermScreenCell,
+    //     user: *anyopaque,
+    // ) callconv(.c) c_int,
+    // sb_clear: ?*const fn (user: *anyopaque) callconv(.c) c_int,
 };
 
 // test "basic print" {
