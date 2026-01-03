@@ -303,10 +303,10 @@ pub fn build(b: *std.Build) !void {
     test_gen_step.dependOn(&b.addInstallDirectory(.{ .source_dir = gen_headers.getDirectory(), .install_dir = .prefix, .install_subdir = "headers/" }).step);
 
     const terminal_lib = b.addLibrary(.{
-        .name = "terminal",
+        .name = "vterm",
         .linkage = .static,
         .root_module = b.createModule(.{
-            .root_source_file = b.path("src/nvim/vterm/vterm.zig"),
+            .root_source_file = b.path("src/nvim/root.zig"),
             .target = target,
             .optimize = optimize,
         }),

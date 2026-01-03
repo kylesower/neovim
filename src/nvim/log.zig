@@ -1,5 +1,5 @@
 const std = @import("std");
-const c = @import("vterm.zig").c;
+const c = @import("root").c;
 const LOG_MAX_SIZE = 2048;
 
 // pub const log = std.log.scoped(.nvim);

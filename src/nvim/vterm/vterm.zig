@@ -14,39 +14,15 @@
 //
 // #define VTERM_VERSION_MAJOR 0
 // #define VTERM_VERSION_MINOR 3
-pub const c = @cImport({
-    @cInclude("stdarg.h");
-    @cInclude("stdio.h");
-    @cInclude("stdlib.h");
-    @cInclude("string.h");
-    @cInclude("auto/config.h");
-    @cInclude("nvim/log.h");
-    @cInclude("nvim/main.h");
-    @cInclude("nvim/grid.h");
-    @cInclude("nvim/memory.h");
-    @cInclude("nvim/errors.h");
-    @cInclude("nvim/vterm/screen.h");
-    @cInclude("nvim/vterm/state.h");
-    @cInclude("nvim/vterm/vterm.h");
-    @cInclude("nvim/vterm/vtermz.h");
-});
 const std = @import("std");
 const ghostty_vt = @import("ghostty-vt");
-const log = @import("log.zig");
-const vterm_handler = @import("vterm_handler.zig");
+pub const c = @import("root").c;
+const log = @import("root").log;
+const vterm_handler = @import("root").handler;
 const Handler = vterm_handler.Handler;
 const Stream = vterm_handler.Stream;
 
-pub const std_options: std.Options = .{
-    // Set the log level to debug. Since we log using the C logger, we let
-    // that do the log level filtering.
-    .log_level = .debug,
-
-    // Define logFn to override the std implementation
-    .logFn = log.log,
-};
-
-fn test_preserve_exit(e: [*c]const u8) noreturn {
+fn test_preserve_exit(e: [*]const u8) noreturn {
     _ = e;
     std.process.exit(1);
 }
@@ -1815,6 +1791,15 @@ pub const VTerm = struct {
     //     }
     //     self.apc_buf.items.len = 0;
     // }
+};
+// pub export const VTermZ = VTerm;
+// typedef enum {
+//   VTERMZ_TERMINATOR_BEL,  // \x07
+//   VTERMZ_TERMINATOR_ST,  // \x1b\x5c
+// } VTermZTerminator;
+pub const VTermZTerminator = enum(c_int) {
+    VTERMZ_TERMINATOR_BEL,
+    VTERMZ_TERMINATOR_ST,
 };
 
 pub var gpa = std.heap.GeneralPurposeAllocator(.{}).init;

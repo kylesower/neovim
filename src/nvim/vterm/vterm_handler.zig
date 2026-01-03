@@ -26,9 +26,9 @@
 const std = @import("std");
 const testing = std.testing;
 const ghostty_vt = @import("ghostty-vt");
-const vterm = @import("vterm.zig");
-const log = @import("log.zig");
-const c = vterm.c;
+const vterm = @import("root").vterm;
+const log = @import("root").log;
+const c = @import("root").c;
 const VTermPos = vterm.VTermPos;
 const VTermProp = vterm.VTermProp;
 const VTermValue = vterm.VTermValue;
@@ -406,9 +406,9 @@ pub const Handler = struct {
             .osc_119 => 119,
         };
 
-        const cterminator: c_uint = switch (terminator) {
-            .st => c.VTERM_TERMINATOR_ST,
-            .bel => c.VTERM_TERMINATOR_BEL,
+        const cterminator = switch (terminator) {
+            .st => vterm.VTermZTerminator.VTERMZ_TERMINATOR_ST,
+            .bel => vterm.VTermZTerminator.VTERMZ_TERMINATOR_BEL,
         };
 
         var buf: [1024]u8 = undefined;
@@ -575,11 +575,11 @@ pub const Handler = struct {
 //   size_t len;
 //   VTermZTerminator terminator; // The terminator used in the original request
 // } VTermZOscColor;
-const VTermZOscColor = extern struct {
+pub const VTermZOscColor = extern struct {
     command: c_int,
     buf: [*]u8,
     len: usize = 0,
-    terminator: c.VTermZTerminator,
+    terminator: vterm.VTermZTerminator,
 };
 
 pub const VTermZCallbacks = extern struct {
