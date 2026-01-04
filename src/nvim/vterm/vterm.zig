@@ -1870,6 +1870,7 @@ pub export fn vtermz_new(rows: c_int, cols: c_int) callconv(.c) *VTerm {
 
 // DONE
 pub export fn vtermz_free(vt: *VTerm) callconv(.c) void {
+    // TODO: find out what's leaking
     vt.t.deinit(vt.allocator);
     vt.rs.deinit(vt.allocator);
     vt.s.deinit();
@@ -2650,11 +2651,12 @@ pub export fn vtermz_update(vt: *VTerm) callconv(.c) void {
 }
 
 pub export fn vtermz_get_size(vt: *const VTerm, rowsp: ?*c_int, colsp: ?*c_int) callconv(.c) void {
+    // TODO: should this be the vt.rs size or vt.t size?
     if (rowsp) |row| {
-        row.* = vt.t.rows;
+        row.* = vt.rs.rows;
     }
     if (colsp) |col| {
-        col.* = vt.t.cols;
+        col.* = vt.rs.cols;
     }
 }
 
