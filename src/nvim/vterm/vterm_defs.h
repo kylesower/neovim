@@ -408,6 +408,9 @@ typedef struct {
   VTermColor fg, bg;
   int uri;
 } VTermScreenCellZ;
-void vterm_screen_cell_setz(VTermScreenCellZ *srcz, VTermScreenCell *dstc);
+void vterm_screen_cell_setz(const VTermScreenCellZ *srcz, VTermScreenCell *dstc);
 void vtermz_screen_set_callbacks(VTermZ *vt, VTermZCallbacks *callbacks, void *user);
 void vterm_screen_cell_set_width(VTermScreenCell *cell, char width);
+VTermColor vterm_screen_cell_get_fg(const VTermScreenCell *cell);
+VTermColor vterm_screen_cell_get_bg(const VTermScreenCell *cell);
+schar_T vterm_screen_cell_get_schar(const VTermScreenCell *cell);

@@ -1129,13 +1129,12 @@ void vterm_screen_cell_set_width(VTermScreenCell *cell, char width) {
 }
 
 // TODO: see if I can avoid this function once I get the width worked out
-void vterm_screen_cell_setz(VTermScreenCellZ *src, VTermScreenCell *dst) {
+void vterm_screen_cell_setz(const VTermScreenCellZ *src, VTermScreenCell *dst) {
   dst->schar            = src->schar;
   dst->uri              = src->uri;
-  // TODO: figure out how this works.
   dst->width            = src->width;
   dst->fg               = src->fg;
-  dst-> bg              = src->bg;
+  dst->bg               = src->bg;
   dst->attrs.bold       = src->attrs.bold;
   dst->attrs.underline  = src->attrs.underline;
   dst->attrs.italic     = src->attrs.italic;
@@ -1148,4 +1147,16 @@ void vterm_screen_cell_setz(VTermScreenCellZ *src, VTermScreenCell *dst) {
   dst->attrs.dhl        = src->attrs.dhl;
   dst->attrs.small      = src->attrs.small;
   dst->attrs.baseline   = src->attrs.baseline;
+}
+
+VTermColor vterm_screen_cell_get_fg(const VTermScreenCell *cell) {
+  return cell->fg;
+}
+
+VTermColor vterm_screen_cell_get_bg(const VTermScreenCell *cell) {
+  return cell->bg;
+}
+
+schar_T vterm_screen_cell_get_schar(const VTermScreenCell *cell) {
+  return cell->schar;
 }

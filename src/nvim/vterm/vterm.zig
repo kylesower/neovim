@@ -669,9 +669,9 @@ pub const VTermColor = extern union {
     type: u8,
     rgb: extern struct {
         type: u8,
-        red: u8 = 0,
-        green: u8 = 0,
-        blue: u8 = 0,
+        r: u8 = 0,
+        g: u8 = 0,
+        b: u8 = 0,
     },
     indexed: extern struct {
         type: u8,
@@ -717,10 +717,10 @@ pub const VTermScreenCellAttrs = extern struct {
 // // } VTermScreenCell;
 pub const VTermScreenCell = extern struct {
     schar: u32 = 0,
-    width: c_char = 0,
+    width: c_char = 1,
     attrs: VTermScreenCellAttrs = .{},
-    fg: VTermColor = .{ .type = 0 },
-    bg: VTermColor = .{ .type = 0 },
+    fg: VTermColor = .{ .type = c.VTERM_COLOR_DEFAULT_FG },
+    bg: VTermColor = .{ .type = c.VTERM_COLOR_DEFAULT_BG },
     uri: c_int = 0,
 };
 //
@@ -2245,81 +2245,134 @@ pub export fn vtermz_keyboard_unichar(vt: *VTerm, ch: u32, vmod: VTermModifier) 
 }
 
 // TODO: make this not horrible
-fn vcell_fg_bg_from_cell(vt: *const VTerm, cell: ghostty_vt.RenderState.Cell) struct { VTermColor, VTermColor } {
+fn vcell_fg_bg_from_cell(cell: ghostty_vt.RenderState.Cell) struct { VTermColor, VTermColor } {
     const cell_style: ghostty_vt.Style = if (cell.raw.style_id != 0) cell.style else .{};
-    var res: struct { VTermColor, VTermColor } = .{
-        .{ .rgb = .{ .type = c.VTERM_COLOR_DEFAULT_FG } },
-        .{ .rgb = .{ .type = c.VTERM_COLOR_DEFAULT_BG } },
+    // var res: struct { VTermColor, VTermColor } = .{
+    //     .{ .rgb = .{ .type = c.VTERM_COLOR_DEFAULT_FG } },
+    //     .{ .rgb = .{ .type = c.VTERM_COLOR_DEFAULT_BG } },
+    // };
+    const fg: VTermColor = switch (cell_style.fg_color) {
+        .palette => |idx| .{
+            .indexed = .{
+                .type = c.VTERM_COLOR_INDEXED,
+                .idx = idx,
+            },
+        },
+        .rgb => |col| .{
+            .rgb = .{
+                .type = c.VTERM_COLOR_RGB,
+                .r = col.r,
+                .g = col.g,
+                .b = col.b,
+            },
+        },
+        .none => .{
+            .type = c.VTERM_COLOR_DEFAULT_FG,
+        },
     };
-    if (cell.raw.style_id == 0) {
-        res[0].type = c.VTERM_COLOR_DEFAULT_FG;
-        res[1].type = c.VTERM_COLOR_DEFAULT_BG;
-    } else {
-        if (cell_style.fg_color == .palette) {
-            res[0] = .{
-                .indexed = .{
-                    .type = c.VTERM_COLOR_INDEXED,
-                    .idx = cell_style.fg_color.palette,
-                },
-            };
-        } else {
-            const fg = cell_style.fg(.{
-                .default = vt.rs.colors.foreground,
-                .palette = &vt.rs.colors.palette,
-                .bold = null,
-            });
-            res[0] = .{
-                .rgb = .{
-                    .type = 0,
-                    .red = fg.r,
-                    .green = fg.g,
-                    .blue = fg.b,
-                },
-            };
-        }
-        if (cell_style.bg_color == .palette) {
-            res[1] = .{
-                .indexed = .{
-                    .type = c.VTERM_COLOR_INDEXED,
-                    .idx = cell_style.bg_color.palette,
-                },
-            };
-        } else if (cell_style.bg(&cell.raw, &vt.rs.colors.palette)) |bg| {
-            res[1] = .{
-                .rgb = .{
-                    .type = 0,
-                    .red = bg.r,
-                    .green = bg.g,
-                    .blue = bg.b,
-                },
-            };
-        } else {
-            res[1].type = c.VTERM_COLOR_DEFAULT_BG;
-        }
-    }
-
-    return res;
+    const bg: VTermColor = switch (cell_style.bg_color) {
+        .palette => |idx| .{
+            .indexed = .{
+                .type = c.VTERM_COLOR_INDEXED,
+                .idx = idx,
+            },
+        },
+        .rgb => |col| .{
+            .rgb = .{
+                .type = c.VTERM_COLOR_RGB,
+                .r = col.r,
+                .g = col.g,
+                .b = col.b,
+            },
+        },
+        .none => .{
+            .type = c.VTERM_COLOR_DEFAULT_BG,
+        },
+    };
+    return .{ fg, bg };
+    // if (cell.raw.style_id == 0) {
+    //     res[0].type = c.VTERM_COLOR_DEFAULT_FG;
+    //     res[1].type = c.VTERM_COLOR_DEFAULT_BG;
+    // } else {
+    //     if (cell_style.fg_color == .palette) {
+    //         res[0] = .{
+    //             .indexed = .{
+    //                 .type = c.VTERM_COLOR_INDEXED,
+    //                 .idx = cell_style.fg_color.palette,
+    //             },
+    //         };
+    //     } else {
+    //         const fg = cell_style.fg(.{
+    //             .default = vt.rs.colors.foreground,
+    //             .palette = &vt.rs.colors.palette,
+    //             .bold = null,
+    //         });
+    //         res[0] = .{
+    //             .rgb = .{
+    //                 .type = 0,
+    //                 .r = fg.r,
+    //                 .g = fg.g,
+    //                 .b = fg.b,
+    //             },
+    //         };
+    //     }
+    //     if (cell_style.bg_color == .palette) {
+    //         res[1] = .{
+    //             .indexed = .{
+    //                 .type = c.VTERM_COLOR_INDEXED,
+    //                 .idx = cell_style.bg_color.palette,
+    //             },
+    //         };
+    //     } else if (cell_style.bg(&cell.raw, &vt.rs.colors.palette)) |bg| {
+    //         res[1] = .{
+    //             .rgb = .{
+    //                 .type = 0,
+    //                 .r = bg.r,
+    //                 .g = bg.g,
+    //                 .b = bg.b,
+    //             },
+    //         };
+    //     } else {
+    //         res[1].type = c.VTERM_COLOR_DEFAULT_BG;
+    //     }
+    // }
+    //
+    // return res;
 }
 
-extern fn vterm_screen_cell_setz(src: *VTermScreenCell, dst: *anyopaque) callconv(.c) void;
+extern fn vterm_screen_cell_setz(src: *const VTermScreenCell, dst: *anyopaque) callconv(.c) void;
 extern fn vterm_screen_cell_set_width(cell: *anyopaque, width: c_char) callconv(.c) void;
+extern fn vterm_screen_cell_get_fg(cell: *anyopaque) callconv(.c) c.VTermColor;
+extern fn vterm_screen_cell_get_bg(cell: *anyopaque) callconv(.c) c.VTermColor;
+extern fn vterm_screen_cell_get_schar(cell: *anyopaque) callconv(.c) u32;
 
-// int vtermz_screen_get_cell(const VTermZ *screen, VTermPos pos, void *cell);
-pub export fn vtermz_screen_get_cell(vt: *const VTerm, pos: c.VTermPos, ret: *anyopaque) callconv(.c) c_int {
+pub export fn vtermz_screen_get_cell(vt: *VTerm, pos: c.VTermPos, ret: *anyopaque) callconv(.c) c_int {
+    vtermz_refresh(vt);
     //   ScreenCell *intcell = getcell(screen, pos.row, pos.col);
     //   if (!intcell) {
     //     return 0;
     //   }
-    // Set width to 1 in case the caller asks for a cell that's beyond the rows or cols
+    // Make sure to set width to 1 in case the caller asks for a cell that's beyond the rows or cols
     // of the current render state. It's possible for the render state to have fewer
-    // rows than the VT.
-    vterm_screen_cell_set_width(ret, 1);
-    if (pos.row < 0 or pos.row >= vt.rs.row_data.len) return 0;
+    // rows than the VT. If the width is not set to 1, the C code will crash.
+    // const fg_c = vterm_screen_cell_get_fg(ret);
+    // const bg_c = vterm_screen_cell_get_bg(ret);
+    // const schar_c = vterm_screen_cell_get_schar(ret);
+    if (pos.row < 0 or pos.row >= vt.rs.row_data.len) {
+        vterm_screen_cell_setz(&.{}, ret);
+        // std.debug.assert(fg_c.type == c.VTERM_COLOR_DEFAULT_FG);
+        // std.debug.assert(bg_c.type == c.VTERM_COLOR_DEFAULT_BG);
+        // std.debug.assert(bg_c.type == c.VTERM_COLOR_DEFAULT_BG);
+        return 0;
+    }
 
     // TODO: refactor caller so we can actually make use of MultiArrayLists
     const cell_row: ghostty_vt.RenderState.Row = vt.rs.row_data.get(@intCast(pos.row));
 
-    if (pos.col < 0 or pos.col >= cell_row.cells.len) return 0;
+    if (pos.col < 0 or pos.col >= cell_row.cells.len) {
+        vterm_screen_cell_setz(&.{}, ret);
+        return 0;
+    }
 
     var vcell: VTermScreenCell = .{};
     const cell = cell_row.cells.get(@intCast(pos.col));
@@ -2375,11 +2428,54 @@ pub export fn vtermz_screen_get_cell(vt: *const VTerm, pos: c.VTermPos, ret: *an
             // log.warn(@src(), "finished processing grapheme cluster", .{});
             vcell.schar = c.schar_from_buf(&buf, idx);
         },
-        .bg_color_palette, .bg_color_rgb => {
-            // vcell.bg = .{
-            //     .type = c.VTERM_COLOR_DEFAULT_BG,
-            // };
-            vcell.schar = 0;
+        .bg_color_palette => {
+            const idx = cell.raw.content.color_palette;
+            vcell.bg = .{
+                .indexed = .{
+                    .type = c.VTERM_COLOR_INDEXED,
+                    .idx = idx,
+                },
+            };
+            // if (bg_c.type != c.VTERM_COLOR_INDEXED) {
+            //     log.warn(@src(), "bg_c type: expected {} (indexed), got {}", .{ c.VTERM_COLOR_INDEXED, bg_c.type });
+            // }
+            // std.debug.print("checking bg_palette color", .{});
+            // std.debug.assert(bg_c.type == c.VTERM_COLOR_INDEXED);
+            // std.debug.assert(bg_c.indexed.idx == idx);
+            // std.debug.assert(bg_c.rgb.green == col.g);
+            // std.debug.assert(bg_c.rgb.blue == col.b);
+            vterm_screen_cell_setz(&vcell, ret);
+            return 1;
+        },
+        .bg_color_rgb => {
+            const col = cell.raw.content.color_rgb;
+            vcell.bg = .{
+                .rgb = .{
+                    .type = c.VTERM_COLOR_RGB,
+                    .r = col.r,
+                    .g = col.g,
+                    .b = col.b,
+                },
+            };
+            // if (bg_c.type != c.VTERM_COLOR_RGB) {
+            //     log.warn(@src(), "bg_c type: expected {} (RGB), got {}", .{ c.VTERM_COLOR_RGB, bg_c.type });
+            // }
+            // if (bg_c.rgb.red != vcell.bg.rgb.r) {
+            //     log.warn(@src(), "bg_c r doesn't match: expected {}, got {}", .{ bg_c.rgb.red, vcell.bg.rgb.r });
+            // }
+            // if (bg_c.rgb.green != vcell.bg.rgb.g) {
+            //     log.warn(@src(), "bg_c g doesn't match: expected {}, got {}", .{ bg_c.rgb.green, vcell.bg.rgb.g });
+            // }
+            // if (bg_c.rgb.blue != vcell.bg.rgb.b) {
+            //     log.warn(@src(), "bg_c b doesn't match: expected {}, got {}", .{ bg_c.rgb.blue, vcell.bg.rgb.b });
+            // }
+            // std.debug.print("checking bg_rgb color", .{});
+            // std.debug.assert(bg_c.type == c.VTERM_COLOR_RGB);
+            // std.debug.assert(bg_c.rgb.red == col.r);
+            // std.debug.assert(bg_c.rgb.green == col.g);
+            // std.debug.assert(bg_c.rgb.blue == col.b);
+            vterm_screen_cell_setz(&vcell, ret);
+            return 1;
         },
     }
 
@@ -2424,9 +2520,57 @@ pub export fn vtermz_screen_get_cell(vt: *const VTerm, pos: c.VTermPos, ret: *an
 
     //   cell->fg = intcell->pen.fg;
     //   cell->bg = intcell->pen.bg;
-    const fg, const bg = vcell_fg_bg_from_cell(vt, cell);
+    const fg, const bg = vcell_fg_bg_from_cell(cell);
     vcell.fg = fg;
     vcell.bg = bg;
+    // std.debug.print("checking fg type", .{});
+    // std.debug.assert(fg_c.type == fg.type);
+    // std.debug.print("checking fg value", .{});
+    // switch (fg.type) {
+    //     c.VTERM_COLOR_INDEXED => std.debug.assert(fg.indexed.idx == fg_c.indexed.idx),
+    //     c.VTERM_COLOR_RGB => {
+    //         std.debug.assert(fg.rgb.r == fg_c.rgb.red);
+    //         std.debug.assert(fg.rgb.g == fg_c.rgb.green);
+    //         std.debug.assert(fg.rgb.b == fg_c.rgb.blue);
+    //     },
+    //     else => {},
+    // }
+    // std.debug.print("checking bg type", .{});
+    // std.debug.assert(bg_c.type == bg.type);
+    // std.debug.print("checking bg value", .{});
+    // switch (bg.type) {
+    //     c.VTERM_COLOR_INDEXED => std.debug.assert(bg.indexed.idx == bg_c.indexed.idx),
+    //     c.VTERM_COLOR_RGB => {
+    //         std.debug.assert(bg.rgb.r == bg_c.rgb.red);
+    //         std.debug.assert(bg.rgb.g == bg_c.rgb.green);
+    //         std.debug.assert(bg.rgb.b == bg_c.rgb.blue);
+    //     },
+    //     else => {},
+    // }
+    // if (pos.row == 4 and (pos.col == 4 or pos.col == 0)) {
+    //     log.warn(@src(), "col: {}, schar_c: {}, style id: {}", .{ pos.col, schar_c, cell.raw.style_id });
+    //     if (cell.raw.style_id != 0) {
+    //         log.warn(@src(), "non default style", .{});
+    //     }
+    // }
+    // if (fg_c.type != fg.type) {
+    //     log.warn(@src(), "fg type mismatch. Expected: {}, got: {}. schar_c: {}, style_id: {}", .{ fg_c.type, fg.type, schar_c, cell.raw.style_id });
+    //     if (cell.raw.style_id != 0) {
+    //         var colbuf: [256]u8 = undefined;
+    //         var colbufw = std.Io.Writer.fixed(&colbuf);
+    //         cell.style.fg_color.format("{}", .{}, &colbufw) catch {};
+    //         log.warn(@src(), "fg_c: {}, {}, {}. cell style: {s}", .{ fg_c.rgb.red, fg_c.rgb.green, fg_c.rgb.blue, colbufw.buffered() });
+    //     }
+    // }
+    // if (bg_c.type != bg.type) {
+    //     log.warn(@src(), "bg type mismatch. Expected: {}, got: {}. schar_c: {}, schar: {}", .{ bg_c.type, bg.type, schar_c, vcell.schar });
+    //     // var colbuf: [256]u8 = undefined;
+    //     // var colbufw = std.Io.Writer.fixed(&colbuf);
+    //     // cell.style.bg_color.format("{}", .{}, &colbufw) catch {};
+    //     // if (schar_c == 0) {
+    //     //     log.warn(@src(), "bg_c: {}, {}, {}. cell style: {s}", .{ bg_c.rgb.red, bg_c.rgb.green, bg_c.rgb.blue, colbufw.buffered() });
+    //     // }
+    // }
 
     // if (vcell.schar == ' ') {
     //   std.debug.print("vcellfg: {}, vcellbg: {}", .{vcell.fg, vcell.bg});
@@ -2466,7 +2610,7 @@ pub export fn vtermz_screen_get_cell(vt: *const VTerm, pos: c.VTermPos, ret: *an
     //     const adj_fg, const adj_bg = vcell_fg_bg_from_cell(vt, adj);
     //     std.debug.print("adj fg type: {}, adj_bg type: {}\n", .{ adj_fg.type, adj_bg.type });
     //     if (adj.raw.content_tag == .codepoint) {
-    //       std.debug.print("adj codepoint: {}\n", .{adj.raw.content.codepoint});
+    //         std.debug.print("adj codepoint: {}\n", .{adj.raw.content.codepoint});
     //     }
     //     if (adj_fg.type & 1 > 0) {
     //         std.debug.print("adj fg ind: {}\n", .{adj_fg.indexed.idx});
@@ -2562,9 +2706,9 @@ pub export fn vtermz_set_utf8(vt: *VTerm, is_utf8: bool) callconv(.c) void {
 // DONE
 pub export fn vtermz_state_set_palette_color(vt: *VTerm, index: c_int, col: *const VTermColor) callconv(.c) void {
     if (index >= 0 and index < 16) vt.t.colors.palette.set(@intCast(index), .{
-        .r = col.rgb.red,
-        .g = col.rgb.green,
-        .b = col.rgb.blue,
+        .r = col.rgb.r,
+        .g = col.rgb.g,
+        .b = col.rgb.b,
     });
 }
 
