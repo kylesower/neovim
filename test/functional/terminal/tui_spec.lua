@@ -175,7 +175,7 @@ describe('TUI :detach', function()
     tt.feed_data('iHello, World')
     screen:expect([[
       Hello, World^                                      |
-      {100:~                                                 }|*3
+      {100:~}                                                 |*3
       {3:[No Name] [+]{MATCH: *}}{MATCH: *}|
       {5:-- INSERT --}                                      |
       {5:-- TERMINAL --}                                    |
@@ -230,7 +230,7 @@ describe('TUI :detach', function()
 
     screen_reattached:expect([[
       We did it, pooky^.                                 |
-      {100:~                                                 }|*3
+      {100:~}                                                 |*3
       {3:[No Name] [+]                                     }|
                                                         |
       {5:-- TERMINAL --}                                    |
@@ -283,7 +283,7 @@ describe('TUI :restart', function()
 
     local s0 = [[
       ^                                                  |
-      {100:~                                                 }|*3
+      {100:~}                                                 |*3
       {3:[No Name]                                         }|
       {MATCH:%d+ +}|
       {5:-- TERMINAL --}                                    |
@@ -364,7 +364,7 @@ describe('TUI :restart', function()
     tt.feed_data('ithis will be removed\027')
     screen_expect([[
       this will be remove^d                              |
-      {100:~                                                 }|*3
+      {100:~}                                                 |*3
       {3:[No Name] [+]                                     }|
                                                         |
       {5:-- TERMINAL --}                                    |
@@ -422,7 +422,7 @@ describe('TUI :restart', function()
     screen:try_resize(60, 6)
     screen_expect([[
       ^                                                            |
-      {100:~                                                           }|*2
+      {100:~}                                                           |*2
       {3:[No Name]                                                   }|
                                                                   |
       {5:-- TERMINAL --}                                              |
@@ -432,7 +432,7 @@ describe('TUI :restart', function()
     tt.feed_data(':restart\013')
     screen_expect([[
       ^                                                            |
-      {100:~                                                           }|*2
+      {100:~}                                                           |*2
       {3:[No Name]                                                   }|
       {MATCH:%d+ +}|
       {5:-- TERMINAL --}                                              |
@@ -559,7 +559,7 @@ describe('TUI', function()
     }, { env = env_notermguicolors })
     screen:expect([[
       ^                                                  |
-      {100:~                                                 }|*3
+      {100:~}                                                 |*3
       {3:[No Name]                                         }|
                                                         |
       {5:-- TERMINAL --}                                    |
@@ -730,7 +730,7 @@ describe('TUI', function()
     feed_data('\003')
     screen:expect([[
       ^                                                  |
-      {100:~                                                 }|*6
+      {100:~}                                                 |*6
       {3:[No Name]                                         }|
                                                         |
       {5:-- TERMINAL --}                                    |
@@ -743,7 +743,7 @@ describe('TUI', function()
       abc                                               |
       test1                                             |
       test2^                                             |
-      {100:~                                                 }|
+      {100:~}                                                 |
       {3:[No Name] [+]                                     }|
       {5:-- INSERT --}                                      |
       {5:-- TERMINAL --}                                    |
@@ -753,7 +753,7 @@ describe('TUI', function()
       abc                                               |
       test1                                             |
       test^2                                             |
-      {100:~                                                 }|
+      {100:~}                                                 |
       {3:[No Name] [+]                                     }|
                                                         |
       {5:-- TERMINAL --}                                    |
@@ -793,7 +793,7 @@ describe('TUI', function()
     feed_data('i\022\027j')
     screen:expect([[
       <M-j>^                                             |
-      {100:~                                                 }|*3
+      {100:~}                                                 |*3
       {3:[No Name] [+]                                     }|
       {5:-- INSERT --}                                      |
       {5:-- TERMINAL --}                                    |
@@ -826,7 +826,7 @@ describe('TUI', function()
     expect_child_buf_lines({ 'ESCsemicolonCtrlEscSuperEscESC' })
     screen:expect([[
       ESCsemicolonCtrlEscSuperEscES^C                    |
-      {100:~                                                 }|*3
+      {100:~}                                                 |*3
       {3:[No Name] [+]                                     }|
                                                         |
       {5:-- TERMINAL --}                                    |
@@ -841,7 +841,7 @@ describe('TUI', function()
     feed_data('i\022\027\000')
     screen:expect([[
       <M-C-Space>^                                       |
-      {100:~                                                 }|*3
+      {100:~}                                                 |*3
       {3:[No Name] [+]                                     }|
       {5:-- INSERT --}                                      |
       {5:-- TERMINAL --}                                    |
@@ -855,7 +855,7 @@ describe('TUI', function()
     feed_data('\022\013') -- ctrl+m
     screen:expect([[
       {104:^G^V^M}^                                            |
-      {100:~                                                 }|*3
+      {100:~}                                                 |*3
       {3:[No Name] [+]                                     }|
       {5:-- INSERT --}                                      |
       {5:-- TERMINAL --}                                    |
@@ -864,7 +864,7 @@ describe('TUI', function()
     feed_data('\031')
     screen:expect([[
       {104:^G^V^M}!!!^                                         |
-      {100:~                                                 }|*3
+      {100:~}                                                 |*3
       {3:[No Name] [+]                                     }|
       {5:-- INSERT --}                                      |
       {5:-- TERMINAL --}                                    |
@@ -886,7 +886,7 @@ describe('TUI', function()
     feed_data('\031')
     screen:expect([[
       ^                                                  |
-      {100:~                                                 }|
+      {100:~}                                                 |
       {3:[No Name]                                         }|
       interact $                                        |
                                                         |*2
@@ -1335,7 +1335,7 @@ describe('TUI', function()
     screen:expect([[
       0123456789./*-+                                   |
       =^                                                 |
-      {100:~                                                 }|*2
+      {100:~}                                                 |*2
       {3:[No Name] [+]                                     }|
       {5:-- INSERT --}                                      |
       {5:-- TERMINAL --}                                    |
@@ -1344,7 +1344,7 @@ describe('TUI', function()
     screen:expect([[
       0123456789./*-+                                   |
       ^=                                                 |
-      {100:~                                                 }|*2
+      {100:~}                                                 |*2
       {3:[No Name] [+]                                     }|
       {5:-- INSERT --}                                      |
       {5:-- TERMINAL --}                                    |
@@ -1353,7 +1353,7 @@ describe('TUI', function()
     screen:expect([[
       0123456789./*-+                                   |
       =^                                                 |
-      {100:~                                                 }|*2
+      {100:~}                                                 |*2
       {3:[No Name] [+]                                     }|
       {5:-- INSERT --}                                      |
       {5:-- TERMINAL --}                                    |
@@ -1362,7 +1362,7 @@ describe('TUI', function()
     screen:expect([[
       0^123456789./*-+                                   |
       =                                                 |
-      {100:~                                                 }|*2
+      {100:~}                                                 |*2
       {3:[No Name] [+]                                     }|
       {5:-- INSERT --}                                      |
       {5:-- TERMINAL --}                                    |
@@ -1371,7 +1371,7 @@ describe('TUI', function()
     screen:expect([[
       0123456789./*-+                                   |
       =^                                                 |
-      {100:~                                                 }|*2
+      {100:~}                                                 |*2
       {3:[No Name] [+]                                     }|
       {5:-- INSERT --}                                      |
       {5:-- TERMINAL --}                                    |
@@ -1380,7 +1380,7 @@ describe('TUI', function()
     screen:expect([[
       0123456789./*-+                                   |
       =^                                                 |
-      {100:~                                                 }|*2
+      {100:~}                                                 |*2
       {3:[No Name] [+]                                     }|
       {5:-- REPLACE --}                                     |
       {5:-- TERMINAL --}                                    |
@@ -1389,7 +1389,7 @@ describe('TUI', function()
     screen:expect([[
       0123456789./*-+                                   |
       ^=                                                 |
-      {100:~                                                 }|*2
+      {100:~}                                                 |*2
       {3:[No Name] [+]                                     }|
                                                         |
       {5:-- TERMINAL --}                                    |
@@ -1398,7 +1398,7 @@ describe('TUI', function()
     screen:expect([[
       ^0123456789./*-+                                   |
       =                                                 |
-      {100:~                                                 }|*2
+      {100:~}                                                 |*2
       {3:[No Name] [+]                                     }|
                                                         |
       {5:-- TERMINAL --}                                    |
@@ -1407,7 +1407,7 @@ describe('TUI', function()
     screen:expect([[
       0123456789^./*-+                                   |
       =                                                 |
-      {100:~                                                 }|*2
+      {100:~}                                                 |*2
       {3:[No Name] [+]                                     }|
                                                         |
       {5:-- TERMINAL --}                                    |
@@ -1416,7 +1416,7 @@ describe('TUI', function()
     screen:expect([[
       0123456789^/*-+                                    |
       =                                                 |
-      {100:~                                                 }|*2
+      {100:~}                                                 |*2
       {3:[No Name] [+]                                     }|
                                                         |
       {5:-- TERMINAL --}                                    |
@@ -1425,7 +1425,7 @@ describe('TUI', function()
     screen:expect([[
       ^0123456789/*-+                                    |
       =                                                 |
-      {100:~                                                 }|*2
+      {100:~}                                                 |*2
       {3:[No Name] [+]                                     }|
                                                         |
       {5:-- TERMINAL --}                                    |
@@ -1434,7 +1434,7 @@ describe('TUI', function()
     screen:expect([[
       0123456789/*-^+                                    |
       =                                                 |
-      {100:~                                                 }|*2
+      {100:~}                                                 |*2
       {3:[No Name] [+]                                     }|
                                                         |
       {5:-- TERMINAL --}                                    |
@@ -1451,7 +1451,7 @@ describe('TUI', function()
     screen:expect([[
       {107: + [No Name]  + [No Name] }{5: [No Name] }{2:            }{107:X}|
       ^                                                  |
-      {100:~                                                 }|*2
+      {100:~}                                                 |*2
       {3:[No Name]                                         }|
                                                         |
       {5:-- TERMINAL --}                                    |
@@ -1461,7 +1461,7 @@ describe('TUI', function()
       {107: + [No Name] }{5: + [No Name] }{107: [No Name] }{2:            }{107:X}|
       0123456789/*-^+                                    |
       =                                                 |
-      {100:~                                                 }|
+      {100:~}                                                 |
       {3:[No Name] [+]                                     }|
                                                         |
       {5:-- TERMINAL --}                                    |
@@ -1470,7 +1470,7 @@ describe('TUI', function()
     screen:expect([[
       {107: + [No Name]  + [No Name] }{5: [No Name] }{2:            }{107:X}|
       ^                                                  |
-      {100:~                                                 }|*2
+      {100:~}                                                 |*2
       {3:[No Name]                                         }|
                                                         |
       {5:-- TERMINAL --}                                    |
@@ -1491,7 +1491,7 @@ describe('TUI', function()
     screen:expect([[
       <D-j><T-k><T-D-CR><M-T-C-S-D-BS>                  |
       <D-F13><T-F14><T-D-F15><M-T-C-S-D-F16>^            |
-      {100:~                                                 }|*2
+      {100:~}                                                 |*2
       {3:[No Name] [+]                                     }|
       {5:-- INSERT --}                                      |
       {5:-- TERMINAL --}                                    |
@@ -1503,7 +1503,7 @@ describe('TUI', function()
     feed_data('i""\027i\027[200~')
     screen:expect([[
       "^"                                                |
-      {100:~                                                 }|*3
+      {100:~}                                                 |*3
       {3:[No Name] [+]                                     }|
       {5:-- INSERT --}                                      |
       {5:-- TERMINAL --}                                    |
@@ -1512,7 +1512,7 @@ describe('TUI', function()
     expect_child_buf_lines({ '"pasted from terminal"' })
     screen:expect([[
       "pasted from terminal^"                            |
-      {100:~                                                 }|*3
+      {100:~}                                                 |*3
       {3:[No Name] [+]                                     }|
       {5:-- INSERT --}                                      |
       {5:-- TERMINAL --}                                    |
@@ -1524,7 +1524,7 @@ describe('TUI', function()
     wait_for_mode('n')
     screen:expect([[
       "pasted from termina^l"                            |
-      {100:~                                                 }|*3
+      {100:~}                                                 |*3
       {3:[No Name] [+]                                     }|
                                                         |
       {5:-- TERMINAL --}                                    |
@@ -1535,7 +1535,7 @@ describe('TUI', function()
     screen:expect([[
       "pasted from terminapasted from terminalpasted fro|
       m termina^ll"                                      |
-      {100:~                                                 }|*2
+      {100:~}                                                 |*2
       {3:[No Name] [+]                                     }|
                                                         |
       {5:-- TERMINAL --}                                    |
@@ -1578,7 +1578,7 @@ describe('TUI', function()
     screen:expect([[
       thisjust paste it^™3 is here                       |
                                                         |
-      {100:~                                                 }|*2
+      {100:~}                                                 |*2
       {3:[No Name] [+]                                     }|
                                                         |
       {5:-- TERMINAL --}                                    |
@@ -1636,7 +1636,7 @@ describe('TUI', function()
       line 1                                            |
       ESC:{104:^[} / CR:                                      |
       ^x                                                 |
-      {100:~                                                 }|
+      {100:~}                                                 |
       {3:[No Name] [+]                   3,1            All}|
                                                         |
       {5:-- TERMINAL --}                                    |
@@ -1687,7 +1687,7 @@ describe('TUI', function()
     screen:expect([[
       foo                                               |
                                                         |
-      {100:~                                                 }|*2
+      {100:~}                                                 |*2
       {3:[No Name] [+]                                     }|
       :"^"                                               |
       {5:-- TERMINAL --}                                    |
@@ -1701,7 +1701,7 @@ describe('TUI', function()
     screen:expect([[
       foo                                               |
                                                         |
-      {100:~                                                 }|*2
+      {100:~}                                                 |*2
       {3:[No Name] [+]                                     }|
       :"line 1^"                                         |
       {5:-- TERMINAL --}                                    |
@@ -1713,7 +1713,7 @@ describe('TUI', function()
     screen:expect([[
       foo                                               |*2
       ^                                                  |
-      {100:~                                                 }|
+      {100:~}                                                 |
       {3:[No Name] [+]                                     }|
                                                         |
       {5:-- TERMINAL --}                                    |
@@ -1760,7 +1760,7 @@ describe('TUI', function()
     screen:expect([[
       foo                                               |
       ^                                                  |
-      {100:~                                                 }|*2
+      {100:~}                                                 |*2
       {3:[No Name] [+]                                     }|
                                                         |
       {5:-- TERMINAL --}                                    |
@@ -1770,7 +1770,7 @@ describe('TUI', function()
     screen:expect([[
       foo                                               |
       ^                                                  |
-      {100:~                                                 }|*2
+      {100:~}                                                 |*2
       {3:[No Name] [+]                                     }|
       {101:paste: Lua: [string "<nvim>"]:4: fake fail}        |
       {5:-- TERMINAL --}                                    |
@@ -1789,7 +1789,7 @@ describe('TUI', function()
     screen:expect([[
       foo                                               |*2
       ^                                                  |
-      {100:~                                                 }|
+      {100:~}                                                 |
       {3:[No Name] [+]                                     }|
                                                         |
       {5:-- TERMINAL --}                                    |
@@ -1799,7 +1799,7 @@ describe('TUI', function()
     screen:expect([[
       foo                                               |*2
       typed input..^.                                    |
-      {100:~                                                 }|
+      {100:~}                                                 |
       {3:[No Name] [+]                                     }|
                                                         |
       {5:-- TERMINAL --}                                    |
@@ -1871,7 +1871,7 @@ describe('TUI', function()
     feed_data('\027[200~fail 1\nfail 2\n\027[201~')
     screen:expect([[
                                                         |
-      {100:~                                                 }|
+      {100:~}                                                 |
       {3:                                                  }|
       {101:paste: Lua: Vim:E21: Cannot make changes, 'modifia}|
       {101:ble' is off}                                       |
@@ -1885,7 +1885,7 @@ describe('TUI', function()
       success 1                                         |
       success 2                                         |
       ^                                                  |
-      {100:~                                                 }|
+      {100:~}                                                 |
       {3:[No Name] [+]                                     }|
                                                         |
       {5:-- TERMINAL --}                                    |
@@ -1904,7 +1904,7 @@ describe('TUI', function()
     screen:expect([[
       zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz|
       zzzzzzzzzzzzzz end^                                |
-      {100:~                                                 }|*2
+      {100:~}                                                 |*2
       {3:[No Name] [+]                                     }|
       {5:-- INSERT --}                                      |
       {5:-- TERMINAL --}                                    |
@@ -1920,7 +1920,7 @@ describe('TUI', function()
     feed_data('\027[200~' .. expected .. '\027[201~')
     screen:expect([[
                                                         |
-      {100:~                                                 }|*3
+      {100:~}                                                 |*3
       {3:[No Name]                                         }|
       :<^                                                |
       {5:-- TERMINAL --}                                    |
@@ -1996,7 +1996,7 @@ describe('TUI', function()
     feed_data('\027[201~')
     screen:expect([[
       ^                                                  |
-      {100:~                                                 }|*3
+      {100:~}                                                 |*3
       {3:[No Name]                                         }|
       {5:-- INSERT --}                                      |
       {5:-- TERMINAL --}                                    |
@@ -2011,7 +2011,7 @@ describe('TUI', function()
     feed_data('00~pasted from terminal\027[201~')
     screen:expect([[
       pasted from terminal^                              |
-      {100:~                                                 }|*3
+      {100:~}                                                 |*3
       {3:[No Name] [+]                                     }|
       {5:-- INSERT --}                                      |
       {5:-- TERMINAL --}                                    |
@@ -2026,7 +2026,7 @@ describe('TUI', function()
     feed_data('1~')
     screen:expect([[
       pasted from terminal^                              |
-      {100:~                                                 }|*3
+      {100:~}                                                 |*3
       {3:[No Name] [+]                                     }|
       {5:-- INSERT --}                                      |
       {5:-- TERMINAL --}                                    |
@@ -2048,7 +2048,7 @@ describe('TUI', function()
     feed_data('\027[200~pasted') -- phase 1
     screen:expect([[
       pasted^                                            |
-      {100:~                                                 }|*3
+      {100:~}                                                 |*3
       {3:[No Name] [+]                                     }|
       {5:-- INSERT --}                                      |
       {5:-- TERMINAL --}                                    |
@@ -2056,7 +2056,7 @@ describe('TUI', function()
     feed_data(' from terminal') -- phase 2
     screen:expect([[
       pasted from terminal^                              |
-      {100:~                                                 }|*3
+      {100:~}                                                 |*3
       {3:[No Name] [+]                                     }|
       {5:-- INSERT --}                                      |
       {5:-- TERMINAL --}                                    |
@@ -2178,7 +2178,7 @@ describe('TUI', function()
     feed_data('ifoobar\027V')
     screen:expect([[
       {114:fooba}^r                                            |
-      {100:~                                                 }|*3
+      {100:~}                                                 |*3
       {3:[No Name] [+]                                     }|
       {5:-- VISUAL LINE --}                                 |
       {5:-- TERMINAL --}                                    |
@@ -2186,7 +2186,7 @@ describe('TUI', function()
     child_session:request('nvim_set_hl', 0, 'Visual', { underdouble = true })
     screen:expect([[
       {115:fooba}^r                                            |
-      {100:~                                                 }|*3
+      {100:~}                                                 |*3
       {3:[No Name] [+]                                     }|
       {5:-- VISUAL LINE --}                                 |
       {5:-- TERMINAL --}                                    |
@@ -2370,7 +2370,7 @@ describe('TUI', function()
       {107:ꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨ}|*310
       {107:ꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨꝨ℃ }|
       b                                                                     |
-      {100:~                                                                     }|*17
+      {100:~}                                                                     |*17
       {3:[No Name] [+]                                                         }|
                                                                             |
       {5:-- TERMINAL --}                                                        |
@@ -2421,7 +2421,7 @@ describe('TUI', function()
     feed_data ':set visualbell\n'
     screen:expect([[
       ^                                                  |
-      {100:~                                                 }|*3
+      {100:~}                                                 |*3
       {3:[No Name]                                         }|
       :set visualbell                                   |
       {5:-- TERMINAL --}                                    |
@@ -2433,7 +2433,7 @@ describe('TUI', function()
     feed_data 'i'
     screen:expect([[
       ^                                                  |
-      {100:~                                                 }|*3
+      {100:~}                                                 |*3
       {3:[No Name]                                         }|
       {5:-- INSERT --}                                      |
       {5:-- TERMINAL --}                                    |
@@ -2501,7 +2501,7 @@ describe('TUI', function()
     child_session:request('nvim_echo', { { 'foo' } }, false, {})
     screen:expect([[
       ^                                                  |
-      {100:~                                                 }|*3
+      {100:~}                                                 |*3
       {3:[No Name]                                         }|
       foo                                               |
       {5:-- TERMINAL --}                                    |
@@ -2509,7 +2509,7 @@ describe('TUI', function()
     exec_lua([[vim.uv.kill(vim.fn.jobpid(vim.bo.channel), 'sigwinch')]])
     screen:expect([[
       ^                                                  |
-      {100:~                                                 }|*3
+      {100:~}                                                 |*3
       {3:[No Name]                                         }|
                                                         |
       {5:-- TERMINAL --}                                    |
@@ -2524,7 +2524,7 @@ describe('TUI', function()
     feed_data(':call jobwait([g:id])\n')
     screen:expect([[
                                                         |
-      {100:~                                                 }|*3
+      {100:~}                                                 |*3
       {3:[No Name]                                         }|
       :call jobwait([g:id])                             |
       {5:-- TERMINAL --}                                    |
@@ -2532,7 +2532,7 @@ describe('TUI', function()
     feed_data('\003')
     screen:expect([[
       ^                                                  |
-      {100:~                                                 }|*3
+      {100:~}                                                 |*3
       {3:[No Name]                                         }|
       Type  :qa  and press <Enter> to exit Nvim         |
       {5:-- TERMINAL --}                                    |
@@ -2544,7 +2544,7 @@ describe('TUI', function()
     feed_data('/foo')
     screen:expect([[
       {2:foo}                                               |
-      {100:~                                                 }|*3
+      {100:~}                                                 |*3
       {3:[No Name] [+]                                     }|
       /foo^                                              |
       {5:-- TERMINAL --}                                    |
@@ -2553,7 +2553,7 @@ describe('TUI', function()
     feed_data('b')
     screen:expect([[
       foo                                               |
-      {100:~                                                 }|*3
+      {100:~}                                                 |*3
       {3:[No Name] [+]                                     }|
       /foob^                                             |
       {5:-- TERMINAL --}                                    |
@@ -2562,7 +2562,7 @@ describe('TUI', function()
     feed_data('a')
     screen:expect([[
       foo                                               |
-      {100:~                                                 }|*3
+      {100:~}                                                 |*3
       {3:[No Name] [+]                                     }|
       /fooba^                                            |
       {5:-- TERMINAL --}                                    |
@@ -2679,7 +2679,7 @@ describe('TUI', function()
     ]])
     screen:expect([[
       ^                         │                        |
-      {1:~                        }│{100:~                       }|*6
+      {1:~                        }│{100:~}                       |*6
       {1:~                        }│                        |
       {3:new                       }{101:{MATCH:<.*[/\]nvim} [-] }|
                                                         |
@@ -2819,7 +2819,7 @@ describe('TUI', function()
     }, { env = env_notermguicolors })
     screen:expect([[
       ^                                                  |
-      {100:~                                                 }|*3
+      {100:~}                                                 |*3
       {3:[No Name]                                         }|
                                                         |
       {5:-- TERMINAL --}                                    |
@@ -2828,7 +2828,7 @@ describe('TUI', function()
     command([[call chansend(b:terminal_job_id, "\<C-h>")]])
     screen:expect([[
       ^                                                  |
-      {100:~                                                 }|*3
+      {100:~}                                                 |*3
       {3:[No Name]                                         }|
       <C-h>                                             |
       {5:-- TERMINAL --}                                    |
@@ -2950,7 +2950,7 @@ describe('TUI UIEnter/UILeave', function()
     }, { env = env_notermguicolors })
     screen:expect([[
       ^                                                  |
-      {100:~                                                 }|*3
+      {100:~}                                                 |*3
       {3:[No Name]                                         }|
                                                         |
       {5:-- TERMINAL --}                                    |
@@ -2958,7 +2958,7 @@ describe('TUI UIEnter/UILeave', function()
     feed_data(':echo g:evs\n')
     screen:expect([[
       ^                                                  |
-      {100:~                                                 }|*3
+      {100:~}                                                 |*3
       {3:[No Name]                                         }|
       ['VimEnter', 'UIEnter']                           |
       {5:-- TERMINAL --}                                    |
@@ -2988,7 +2988,7 @@ describe('TUI FocusGained/FocusLost', function()
 
     screen:expect([[
       ^                                                  |
-      {100:~                                                 }|*3
+      {100:~}                                                 |*3
       {3:[No Name]                                         }|
                                                         |
       {5:-- TERMINAL --}                                    |
@@ -3010,7 +3010,7 @@ describe('TUI FocusGained/FocusLost', function()
       feed_data('\027[I')
       screen:expect([[
         ^                                                  |
-        {100:~                                                 }|*3
+        {100:~}                                                 |*3
         {3:[No Name]                                         }|
         gained                                            |
         {5:-- TERMINAL --}                                    |
@@ -3019,7 +3019,7 @@ describe('TUI FocusGained/FocusLost', function()
       feed_data('\027[O')
       screen:expect([[
         ^                                                  |
-        {100:~                                                 }|*3
+        {100:~}                                                 |*3
         {3:[No Name]                                         }|
         lost                                              |
         {5:-- TERMINAL --}                                    |
@@ -3032,7 +3032,7 @@ describe('TUI FocusGained/FocusLost', function()
     feed_data('i')
     screen:expect([[
       ^                                                  |
-      {100:~                                                 }|*3
+      {100:~}                                                 |*3
       {3:[No Name]                                         }|
       :set noshowmode                                   |
       {5:-- TERMINAL --}                                    |
@@ -3041,7 +3041,7 @@ describe('TUI FocusGained/FocusLost', function()
       feed_data('\027[I')
       screen:expect([[
         ^                                                  |
-        {100:~                                                 }|*3
+        {100:~}                                                 |*3
         {3:[No Name]                                         }|
         gained                                            |
         {5:-- TERMINAL --}                                    |
@@ -3049,7 +3049,7 @@ describe('TUI FocusGained/FocusLost', function()
       feed_data('\027[O')
       screen:expect([[
         ^                                                  |
-        {100:~                                                 }|*3
+        {100:~}                                                 |*3
         {3:[No Name]                                         }|
         lost                                              |
         {5:-- TERMINAL --}                                    |
@@ -3064,7 +3064,7 @@ describe('TUI FocusGained/FocusLost', function()
     feed_data('\027[I')
     screen:expect([[
                                                         |
-      {100:~                                                 }|*3
+      {100:~}                                                 |*3
       {3:[No Name]                                         }|
       :^                                                 |
       {5:-- TERMINAL --}                                    |
@@ -3185,7 +3185,7 @@ describe("TUI 't_Co' (terminal colors)", function()
     elseif maxcolors == 16 then
       tline = '~                                                 '
     else
-      tline = '{100:~                                                 }'
+      tline = '{100:~}                                                 '
     end
 
     screen:expect(string.format(
@@ -3521,7 +3521,7 @@ describe('TUI', function()
     feed_data('Gitext')
     screen:expect([[
       text^                                              |
-      {100:~                                                 }|*4
+      {100:~}                                                 |*4
       {5:-- INSERT --}                                      |
       {5:-- TERMINAL --}                                    |
     ]])
@@ -3538,7 +3538,7 @@ describe('TUI', function()
 
     screen:expect([[
       ^                                                  |
-      {100:~                                                 }|*4
+      {100:~}                                                 |*4
                                                         |
       {5:-- TERMINAL --}                                    |
     ]])
@@ -3924,7 +3924,7 @@ describe('TUI client', function()
     }, { env = env_notermguicolors })
     screen_server:expect([[
       ^                                                  |
-      {100:~                                                 }|*3
+      {100:~}                                                 |*3
       {3:[No Name]                                         }|
                                                         |
       {5:-- TERMINAL --}                                    |
@@ -3933,7 +3933,7 @@ describe('TUI client', function()
     feed_data('iHello, World')
     screen_server:expect([[
       Hello, World^                                      |
-      {100:~                                                 }|*3
+      {100:~}                                                 |*3
       {3:[No Name] [+]                                     }|
       {5:-- INSERT --}                                      |
       {5:-- TERMINAL --}                                    |
@@ -3941,7 +3941,7 @@ describe('TUI client', function()
     feed_data('\027')
     local s0 = [[
       Hello, Worl^d                                      |
-      {100:~                                                 }|*3
+      {100:~}                                                 |*3
       {3:[No Name] [+]                                     }|
                                                         |
       {5:-- TERMINAL --}                                    |
@@ -3989,7 +3989,7 @@ describe('TUI client', function()
     feed_data(':restart +qall!\n')
     screen_client:expect([[
       ^                                                  |
-      {100:~                                                 }|*3
+      {100:~}                                                 |*3
       {3:[No Name]                                         }|
                                                         |
       {5:-- TERMINAL --}                                    |
@@ -4033,7 +4033,7 @@ describe('TUI client', function()
     }, { env = env_notermguicolors })
     screen_client:expect([[
       Halloj^!                                           |
-      {100:~                                                 }|*4
+      {100:~}                                                 |*4
                                                         |
       {5:-- TERMINAL --}                                    |
     ]])
@@ -4091,7 +4091,7 @@ describe('TUI client', function()
     feed_data(':restart +qall!\n')
     screen_client:expect([[
       ^                                                  |
-      {100:~                                                 }|*4
+      {100:~}                                                 |*4
                                                         |
       {5:-- TERMINAL --}                                    |
     ]])
@@ -4196,7 +4196,7 @@ describe('TUI client', function()
 
     local screen_normal = [[
       Hello, Worl^d                                      |
-      {100:~                                                 }|*3
+      {100:~}                                                 |*3
       {3:[No Name] [+]                                     }|
                                                         |
       {5:-- TERMINAL --}                                    |

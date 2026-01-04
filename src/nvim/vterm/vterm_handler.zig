@@ -94,9 +94,14 @@ pub const Handler = struct {
     }
 
     pub fn deinit(self: *Handler) void {
-        // Currently does nothing but may in the future so callers should
-        // call this.
-        _ = self;
+        self.apc.deinit();
+        self.dcs.deinit();
+        // if (comptime tmux_enabled) tmux: {
+        //     const viewer = self.tmux_viewer orelse break :tmux;
+        //     viewer.deinit();
+        //     self.alloc.destroy(viewer);
+        //     self.tmux_viewer = null;
+        // }
     }
 
     pub fn vt(
