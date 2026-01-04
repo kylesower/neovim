@@ -421,7 +421,8 @@ pub const Handler = struct {
             .bel => vterm.VTermZTerminator.VTERMZ_TERMINATOR_BEL,
         };
 
-        var buf: [1024]u8 = undefined;
+        var buf: [64]u8 = undefined;
+        var bufw = std.Io.Writer.fixed(&buf);
 
         var osc: VTermZOscColor = .{
             .command = command,
@@ -429,7 +430,6 @@ pub const Handler = struct {
             .len = 0,
             .terminator = cterminator,
         };
-        var bufw = std.Io.Writer.fixed(&buf);
 
         var it = requests.constIterator(0);
         while (it.next()) |req| {
@@ -440,7 +440,7 @@ pub const Handler = struct {
                             self.terminal.flags.dirty.palette = true;
                             self.terminal.colors.palette.set(i, set.color);
                             bufw.print(
-                                ";{};rgb:{x}/{x}/{x}",
+                                "{};rgb:{x:0>2}/{x:0>2}/{x:0>2}",
                                 .{ i, set.color.r, set.color.g, set.color.b },
                             ) catch {};
                         },
@@ -448,21 +448,21 @@ pub const Handler = struct {
                             .foreground => {
                                 self.terminal.colors.foreground.set(set.color);
                                 bufw.print(
-                                    ";rgb:{x}/{x}/{x}",
+                                    "rgb:{x:0>2}/{x:0>2}/{x:0>2}",
                                     .{ set.color.r, set.color.g, set.color.b },
                                 ) catch {};
                             },
                             .background => {
                                 self.terminal.colors.background.set(set.color);
                                 bufw.print(
-                                    ";rgb:{x}/{x}/{x}",
+                                    "rgb:{x:0>2}/{x:0>2}/{x:0>2}",
                                     .{ set.color.r, set.color.g, set.color.b },
                                 ) catch {};
                             },
                             .cursor => {
                                 self.terminal.colors.cursor.set(set.color);
                                 bufw.print(
-                                    ";rgb:{x}/{x}/{x}",
+                                    "rgb:{x:0>2}/{x:0>2}/{x:0>2}",
                                     .{ set.color.r, set.color.g, set.color.b },
                                 ) catch {};
                             },
@@ -511,33 +511,32 @@ pub const Handler = struct {
                     mask.* = .initEmpty();
                 },
 
-                // TODO: bufw print query
                 .query => |value| {
                     switch (value) {
                         .palette => |idx| bufw.print(
-                            ";{};?",
+                            "{};?",
                             .{idx},
                         ) catch {},
                         .special => |sp| bufw.print(
-                            ";{};?",
+                            "{};?",
                             .{sp.osc4()},
                         ) catch {},
-                        .dynamic => bufw.print(";?", .{}) catch {},
+                        .dynamic => bufw.print("?", .{}) catch {},
                     }
                 },
                 .reset_special,
                 => {},
             }
-        }
 
-        const written = bufw.buffered();
-        if (written.len > 0) {
-            // Skip the leading semicolon
-            osc.buf = written[1..].ptr;
-            osc.len = written[1..].len;
+            const written = bufw.buffered();
+            if (written.len == 0) continue;
             if (self.callbacks.osc_color) |on_osc_color| {
+                osc.buf = written.ptr;
+                osc.len = written.len;
                 _ = on_osc_color(osc, self.cbdata);
             }
+
+            _ = bufw.consumeAll();
         }
     }
 
