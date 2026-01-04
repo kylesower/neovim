@@ -1,6 +1,7 @@
-// Much of the code in this handler is adapted from the ReadOnlyHandler in
-// Ghostty's ReadOnlyHandler.
+// Much of the code in this handler is adapted from the handlers that
+// Ghostty uses.
 // https://github.com/ghostty-org/ghostty/blob/9a21e563114b8b1eb1501d03a087af8d23e508d3/src/terminal/stream_readonly.zig
+// https://github.com/ghostty-org/ghostty/blob/9a21e563114b8b1eb1501d03a087af8d23e508d3/src/termio/stream_handler.zig
 //
 // MIT License
 //
@@ -25,10 +26,15 @@
 // SOFTWARE.
 const std = @import("std");
 const testing = std.testing;
+// TODO: maybe use the assert that Ghostty uses, which is slightly different
+// from stdlib to ensure it gets optimized out in ReleaseFast builds.
+const assert = std.debug.assert;
 const ghostty_vt = @import("ghostty-vt");
-const vterm = @import("root").vterm;
-const log = @import("root").log;
-const c = @import("root").c;
+const vterm = @import("../root.zig").vterm;
+const log = @import("../root.zig").log;
+const c = @import("../root.zig").c;
+const DcsHandler = ghostty_vt.dcs.Handler;
+const ApcHandler = ghostty_vt.apc.Handler;
 const VTermPos = vterm.VTermPos;
 const VTermProp = vterm.VTermProp;
 const VTermValue = vterm.VTermValue;
@@ -62,17 +68,29 @@ pub const Stream = ghostty_vt.Stream(Handler);
 /// don't make sense to me to add to the Terminal directly. Instead, you
 /// can call `vtHandler` on Terminal to initialize this handler.
 pub const Handler = struct {
+    alloc: Allocator,
     /// The terminal state to modify.
     terminal: *Terminal,
     callbacks: VTermZCallbacks = .{},
     cbdata: ?*anyopaque = null,
-    allocator: Allocator,
+    // Used to send data back to controlling terminal
+    msg_writer: ?vterm.VTermMsgWriter = null,
+    // Terminal handle
+    // outdata: *anyopaque,
+    dcs: DcsHandler,
+    apc: ApcHandler,
 
     pub fn init(terminal: *Terminal, allocator: Allocator) Handler {
         return .{
             .terminal = terminal,
-            .allocator = allocator,
+            .alloc = allocator,
+            .dcs = .{},
+            .apc = .{},
         };
+    }
+
+    pub fn term_send(self: *Handler, msg: []const u8) void {
+        if (self.msg_writer) |w| w.send(msg);
     }
 
     pub fn deinit(self: *Handler) void {
@@ -222,9 +240,7 @@ pub const Handler = struct {
             .decaln => try self.terminal.decaln(),
             .full_reset => self.terminal.fullReset(),
             .start_hyperlink => try self.terminal.screens.active.startHyperlink(value.uri, value.id),
-            .end_hyperlink => {
-                self.terminal.screens.active.endHyperlink();
-            },
+            .end_hyperlink => self.terminal.screens.active.endHyperlink(),
             .prompt_start => {
                 self.terminal.screens.active.cursor.page_row.semantic_prompt = .prompt;
                 self.terminal.flags.shell_redraws_prompt = value.redraw;
@@ -237,29 +253,23 @@ pub const Handler = struct {
             .color_operation => try self.colorOperation(value.op, &value.requests, value.terminator),
             .kitty_color_report => try self.kittyColorOperation(value),
 
-            // No supported DCS commands have any terminal-modifying effects,
-            // but they may in the future. For now we just ignore it.
-            .dcs_hook,
-            .dcs_put,
-            .dcs_unhook,
-            => {},
+            .dcs_hook => try self.dcsHook(value),
+            .dcs_put => try self.dcsPut(value),
+            .dcs_unhook => try self.dcsUnhook(),
 
-            // APC can modify terminal state (Kitty graphics) but we don't
-            // currently support it in the readonly stream.
-            .apc_start,
-            .apc_end,
-            .apc_put,
-            => {},
+            .apc_start => self.apc.start(),
+            .apc_put => self.apc.feed(self.alloc, value),
+            .apc_end => try self.apcEnd(),
 
             // Have no terminal-modifying effect
             .bell => _ = if (self.callbacks.bell) |bell| bell(self.cbdata),
+            .device_attributes => {},
+            .device_status => try self.deviceStatusReport(value.request),
             .enquiry,
             .request_mode,
             .request_mode_unknown,
             .size_report,
             .xtversion,
-            .device_attributes,
-            .device_status,
             .kitty_keyboard_query,
             .window_title,
             .report_pwd,
@@ -566,6 +576,271 @@ pub const Handler = struct {
         }
     }
 
+    pub fn deviceAttributes(
+        self: *Handler,
+        req: ghostty_vt.DeviceAttributeReq,
+    ) !void {
+        // For the below, we quack as a VT220. We don't quack as
+        // a 420 because we don't support DCS sequences.
+        switch (req) {
+            .primary =>
+            // 62 = Level 2 conformance
+            // 22 = Color text
+            // 52 = Clipboard access
+            // TODO: configurable clipboard access?
+            // .write_stable = if (self.clipboard_write != .deny)
+            //     "\x1B[?62;22;52c"
+            // else
+            //     "\x1B[?62;22c",
+            self.term_send("\x1B[?62;22;52c"),
+            .secondary => self.term_send("\x1B[>1;10;0c"),
+
+            else => log.warn_scoped(@src(), .vterm_handler, "unimplemented device attributes req: {}", .{req}),
+        }
+    }
+
+    pub fn deviceStatusReport(
+        self: *Handler,
+        req: ghostty_vt.device_status.Request,
+    ) !void {
+        switch (req) {
+            .operating_status => self.term_send("\x1B[0n"),
+
+            .cursor_position => {
+                const pos: struct {
+                    x: usize,
+                    y: usize,
+                } = if (self.terminal.modes.get(.origin)) .{
+                    .x = self.terminal.screens.active.cursor.x -| self.terminal.scrolling_region.left,
+                    .y = self.terminal.screens.active.cursor.y -| self.terminal.scrolling_region.top,
+                } else .{
+                    .x = self.terminal.screens.active.cursor.x,
+                    .y = self.terminal.screens.active.cursor.y,
+                };
+                _ = pos;
+
+                // TODO: write msg
+                // Response always is at least 4 chars, so this leaves the
+                // remainder for the row/column as base-10 numbers. This
+                // will support a very large terminal.
+                // var msg: termio.Message = .{ .write_small = .{} };
+                // const resp = try std.fmt.bufPrint(&msg.write_small.data, "\x1B[{};{}R", .{
+                //     pos.y + 1,
+                //     pos.x + 1,
+                // });
+                // msg.write_small.len = @intCast(resp.len);
+                //
+                // self.messageWriter(msg);
+            },
+
+            // TODO: write msg
+            .color_scheme => {}, // self.surfaceMessageWriter(.{ .report_color_scheme = true }),
+        }
+    }
+
+    pub inline fn dcsHook(self: *Handler, dcs: ghostty_vt.DCS) !void {
+        var cmd = self.dcs.hook(self.alloc, dcs) orelse return;
+        defer cmd.deinit();
+        try self.dcsCommand(&cmd);
+    }
+
+    pub inline fn dcsPut(self: *Handler, byte: u8) !void {
+        var cmd = self.dcs.put(byte) orelse return;
+        defer cmd.deinit();
+        try self.dcsCommand(&cmd);
+    }
+
+    pub inline fn dcsUnhook(self: *Handler) !void {
+        var cmd = self.dcs.unhook() orelse return;
+        defer cmd.deinit();
+        try self.dcsCommand(&cmd);
+    }
+
+    fn dcsCommand(self: *Handler, cmd: *ghostty_vt.dcs.Command) !void {
+        switch (cmd.*) {
+            .tmux => {},
+            // .tmux => |tmux| tmux: {
+            //     // If tmux control mode is disabled at the build level,
+            //     // then this whole block shouldn't be analyzed.
+            //     if (comptime !tmux_enabled) break :tmux;
+            //     log.info("tmux control mode event cmd={f}", .{tmux});
+            //
+            //     switch (tmux) {
+            //         .enter => {
+            //             // Setup our viewer state
+            //             assert(self.tmux_viewer == null);
+            //             const viewer = try self.alloc.create(terminal.tmux.Viewer);
+            //             errdefer self.alloc.destroy(viewer);
+            //             viewer.* = try .init(self.alloc);
+            //             errdefer viewer.deinit();
+            //             self.tmux_viewer = viewer;
+            //             break :tmux;
+            //         },
+            //
+            //         .exit => if (self.tmux_viewer) |viewer| {
+            //             // Free our viewer state
+            //             viewer.deinit();
+            //             self.alloc.destroy(viewer);
+            //             self.tmux_viewer = null;
+            //             break :tmux;
+            //         },
+            //
+            //         else => {},
+            //     }
+            //
+            //     assert(tmux != .enter);
+            //     assert(tmux != .exit);
+            //
+            //     const viewer = self.tmux_viewer orelse {
+            //         // This can only really happen if we failed to
+            //         // initialize the viewer on enter.
+            //         log.info(
+            //             "received tmux control mode command without viewer: {f}",
+            //             .{tmux},
+            //         );
+            //
+            //         break :tmux;
+            //     };
+            //
+            //     for (viewer.next(.{ .tmux = tmux })) |action| {
+            //         log.info("tmux viewer action={f}", .{action});
+            //         switch (action) {
+            //             .exit => {
+            //                 // We ignore this because we will fully exit when
+            //                 // our DCS connection ends. We may want to handle
+            //                 // this in the future to notify our GUI we're
+            //                 // disconnected though.
+            //             },
+            //
+            //             .command => |command| {
+            //                 assert(command.len > 0);
+            //                 assert(command[command.len - 1] == '\n');
+            //                 self.messageWriter(try termio.Message.writeReq(
+            //                     self.alloc,
+            //                     command,
+            //                 ));
+            //             },
+            //
+            //             .windows => {
+            //                 // TODO
+            //             },
+            //         }
+            //     }
+            // },
+
+            .xtgettcap => |*gettcap| {
+                _ = gettcap;
+                // TODO: see if I can get this out of ghostty_vt. Right now it doesn't
+                // seem to be exposed.
+                // const map = comptime terminfo.ghostty.xtgettcapMap();
+                // while (gettcap.next()) |key| {
+                //     const response = map.get(key) orelse continue;
+                //     self.messageWriter(.{ .write_stable = response });
+                // }
+            },
+
+            .decrqss => |decrqss| {
+                var response: [128]u8 = undefined;
+                var stream = std.io.fixedBufferStream(&response);
+                const writer = stream.writer();
+
+                // Offset the stream position to just past the response prefix.
+                // We will write the "payload" (if any) below. If no payload is
+                // written then we send an invalid DECRPSS response.
+                const prefix_fmt = "\x1bP{d}$r";
+                const prefix_len = std.fmt.comptimePrint(prefix_fmt, .{0}).len;
+                stream.pos = prefix_len;
+
+                switch (decrqss) {
+                    // Invalid or unhandled request
+                    .none => {},
+
+                    .sgr => {
+                        const buf = try self.terminal.printAttributes(stream.buffer[stream.pos..]);
+
+                        // printAttributes wrote into our buffer, so adjust the stream
+                        // position
+                        stream.pos += buf.len;
+
+                        try writer.writeByte('m');
+                    },
+
+                    .decscusr => {
+                        const blink = self.terminal.modes.get(.cursor_blinking);
+                        const style: u8 = switch (self.terminal.screens.active.cursor.cursor_style) {
+                            .block => if (blink) 1 else 2,
+                            .underline => if (blink) 3 else 4,
+                            .bar => if (blink) 5 else 6,
+
+                            // Below here, the cursor styles aren't represented by
+                            // DECSCUSR so we map it to some other style.
+                            .block_hollow => if (blink) 1 else 2,
+                        };
+                        try writer.print("{d} q", .{style});
+                    },
+
+                    .decstbm => {
+                        try writer.print("{d};{d}r", .{
+                            self.terminal.scrolling_region.top + 1,
+                            self.terminal.scrolling_region.bottom + 1,
+                        });
+                    },
+
+                    .decslrm => {
+                        // We only send a valid response when left and right
+                        // margin mode (DECLRMM) is enabled.
+                        if (self.terminal.modes.get(.enable_left_and_right_margin)) {
+                            try writer.print("{d};{d}s", .{
+                                self.terminal.scrolling_region.left + 1,
+                                self.terminal.scrolling_region.right + 1,
+                            });
+                        }
+                    },
+                }
+
+                // Our response is valid if we have a response payload
+                const valid = stream.pos > prefix_len;
+
+                // Write the terminator
+                try writer.writeAll("\x1b\\");
+
+                // Write the response prefix into the buffer
+                // _ = try std.fmt.bufPrint(response[0..prefix_len], prefix_fmt, .{@intFromBool(valid)});
+                // const msg = try termio.Message.writeReq(self.alloc, response[0..stream.pos]);
+                // TODO: fix
+                _ = valid;
+                // const msg = "";
+                // self.messageWriter(msg);
+            },
+        }
+    }
+
+    pub fn apcEnd(self: *Handler) !void {
+        var cmd = self.apc.end() orelse return;
+        defer cmd.deinit(self.alloc);
+
+        // log.warn("APC command: {}", .{cmd});
+        switch (cmd) {
+            // TODO: it seems kitty is currently unsupported in the zig module
+            .kitty => |*kitty_cmd| _ = kitty_cmd,
+            // TODO: kitty graphics :)
+            // if (self.callbacks.on_apc) |apc| {
+            //     apc(kitty_cmd.data.ptr, kitty_cmd.data.len, self.cbdata);
+            // }
+            // .kitty => |*kitty_cmd| {
+            //     if (self.terminal.kittyGraphics(self.alloc, kitty_cmd)) |resp| {
+            //         var buf: [1024]u8 = undefined;
+            //         var writer: std.Io.Writer = .fixed(&buf);
+            //         try resp.encode(&writer);
+            //         const final = writer.buffered();
+            //         if (final.len > 2) {
+            //             log.debug("kitty graphics response: {x}", .{final});
+            //             self.messageWriter(try termio.Message.writeReq(self.alloc, final));
+            //         }
+            //     }
+            // },
+        }
+    }
     fn cbMoveCursor(self: *Handler) void {
         if (self.callbacks.movecursor) |movecursor| {
             const x = self.terminal.screens.active.cursor.x;
@@ -580,15 +855,9 @@ pub const Handler = struct {
     }
 };
 
-// typedef struct {
-//   int command;  // 4 for palette colors, 10 for FG, 11 for BG, 12 for cursor
-//   char *buf; // If command is 4, the colors being queried
-//   size_t len;
-//   VTermZTerminator terminator; // The terminator used in the original request
-// } VTermZOscColor;
 pub const VTermZOscColor = extern struct {
     command: c_int,
-    buf: [*]u8,
+    buf: [*]const u8,
     len: usize = 0,
     terminator: vterm.VTermZTerminator,
 };
@@ -609,6 +878,8 @@ pub const VTermZCallbacks = extern struct {
     bell: ?*const fn (user: ?*anyopaque) callconv(.c) c_int = null,
     theme: ?*const fn (dark: *bool, user: ?*anyopaque) callconv(.c) c_int = null,
     osc_color: ?*const fn (osc: VTermZOscColor, user: ?*anyopaque) callconv(.c) c_int = null,
+    on_apc: ?*const fn (buf: [*]const u8, len: usize, user: ?*anyopaque) callconv(.c) c_int = null,
+    on_dcs: ?*const fn (buf: [*]const u8, len: usize, user: ?*anyopaque) callconv(.c) c_int = null,
     // sb_pushline: ?*const fn (
     //     cols: c_int,
     //     cells: [*]const VTermScreenCell,

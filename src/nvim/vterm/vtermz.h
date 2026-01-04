@@ -16,7 +16,7 @@ typedef enum {
 
 typedef struct {
   int command;  // 4 for palette colors, 10 for FG, 11 for BG, 12 for cursor
-  char *buf; // If command is 4, the colors being queried
+  const char *buf; // Everything after the semicolon following the command (excluding terminator)
   size_t len;
   VTermZTerminator terminator; // The terminator used in the original request
 } VTermZOscColor;
@@ -30,6 +30,8 @@ typedef struct {
   int (*bell)(void *user);
   int (*theme)(bool *dark, void *user);
   int (*osc_color)(VTermZOscColor osc, void *user);
+  int (*on_apc)(const char *buf, size_t len, void *user);
+  int (*on_dcs)(const char *buf, size_t len, void *user);
   // int (*sb_pushline)(int cols, const VTermScreenCell *cells, void *user);
   // int (*sb_popline)(int cols, VTermScreenCell *cells, void *user);
   // int (*sb_clear)(void *user);

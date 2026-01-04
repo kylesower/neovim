@@ -16,9 +16,9 @@
 // #define VTERM_VERSION_MINOR 3
 const std = @import("std");
 const ghostty_vt = @import("ghostty-vt");
-pub const c = @import("root").c;
-const log = @import("root").log;
-const vterm_handler = @import("root").handler;
+pub const c = @import("../root.zig").c;
+const log = @import("../root.zig").log;
+const vterm_handler = @import("../root.zig").handler;
 const Handler = vterm_handler.Handler;
 const Stream = vterm_handler.Stream;
 
@@ -1764,12 +1764,21 @@ const keycodes_kp_csiu: []const KeyCodes = &.{
 // TODO: find reasonable default size
 pub const VTERM_BUF_DEFAULT_SIZE = 64;
 const Terminal = ghostty_vt.Terminal;
+
+pub const VTermMsgWriter = struct {
+    outfunc: VTermOutputCallback,
+    outdata: *anyopaque,
+
+    pub fn send(self: *const VTermMsgWriter, msg: []const u8) void {
+        self.outfunc(msg.ptr, msg.len, self.outdata);
+    }
+};
+
 pub const VTerm = struct {
     t: *ghostty_vt.Terminal,
     rs: ghostty_vt.RenderState,
     s: Stream,
-    outfunc: ?VTermOutputCallback,
-    outdata: ?*anyopaque,
+    msg_writer: ?VTermMsgWriter,
     allocator: std.mem.Allocator,
     // One for primary and one for alternate screen
     key_encoding_stack: struct {
@@ -1791,6 +1800,10 @@ pub const VTerm = struct {
     //     }
     //     self.apc_buf.items.len = 0;
     // }
+    //
+    pub fn term_send(self: *VTerm, msg: []const u8) void {
+        if (self.msg_writer) |w| w.send(msg);
+    }
 };
 // pub export const VTermZ = VTerm;
 // typedef enum {
@@ -1901,8 +1914,12 @@ pub export fn vtermz_output_set_callback(
     func: VTermOutputCallback,
     user: *anyopaque,
 ) callconv(.c) void {
-    vt.outfunc = func;
-    vt.outdata = user;
+    const msg_writer: VTermMsgWriter = .{
+        .outfunc = func,
+        .outdata = user,
+    };
+    vt.msg_writer = msg_writer;
+    vt.s.handler.msg_writer = msg_writer;
 }
 
 pub export fn vtermz_screen_set_callbacks(vt: *VTerm, callbacks: *const vterm_handler.VTermZCallbacks, user: *anyopaque) callconv(.c) void {
@@ -2126,10 +2143,7 @@ pub export fn vtermz_keyboard_key(vt: *VTerm, vkey: VTermKey, vmod: VTermModifie
     };
     // TODO: handle error
     ghostty_vt.input.encodeKey(&vt.keyout_buffer_w, evt, .{}) catch return;
-    if (vt.outfunc) |outfunc| {
-        const buf = vt.keyout_buffer_w.buffered();
-        outfunc(buf.ptr, buf.len, vt.outdata);
-    }
+    vt.term_send(vt.keyout_buffer_w.buffered());
     _ = vt.keyout_buffer_w.consumeAll();
 }
 
@@ -2159,9 +2173,7 @@ pub export fn vtermz_keyboard_unichar(vt: *VTerm, ch: u32, vmod: VTermModifier) 
     if (passthru) {
         if (ch > std.math.maxInt(u21)) return;
         const len = std.unicode.utf8Encode(@intCast(ch), vt.keyout_buffer[0..4]) catch 0;
-        if (vt.outfunc) |outfunc| {
-            outfunc(&vt.keyout_buffer, len, vt.outdata);
-        }
+        vt.term_send(vt.keyout_buffer[0..len]);
         return;
     }
 
@@ -2224,10 +2236,7 @@ pub export fn vtermz_keyboard_unichar(vt: *VTerm, ch: u32, vmod: VTermModifier) 
         .action = .press,
     };
     ghostty_vt.input.encodeKey(&vt.keyout_buffer_w, evt, .{}) catch return;
-    if (vt.outfunc) |outfunc| {
-        const buf = vt.keyout_buffer_w.buffered();
-        outfunc(buf.ptr, buf.len, vt.outdata);
-    }
+    vt.term_send(vt.keyout_buffer_w.buffered());
     _ = vt.keyout_buffer_w.consumeAll();
 }
 
@@ -2412,11 +2421,11 @@ pub export fn vtermz_screen_get_cell(vt: *VTerm, pos: VTermPos, ret: *anyopaque)
     // const raw_value: u32 = std.math.maxInt(u32);
     // vcell.attrs = @bitCast(raw_value);
 
-    // TODO: figure out what the deal is what this.
+    // TODO: figure out what the deal is with this.
     //   cell->uri = intcell->pen.uri;
     //
     // vcell.width = 1;
-    // TODO: figure out what the deal is what this.
+    // TODO: figure out what the deal is with this.
     //   if (pos.col < (screen->cols - 1)
     //       && getcell(screen, pos.row, pos.col + 1)->schar == (uint32_t)-1) {
     //     cell->width = 2;

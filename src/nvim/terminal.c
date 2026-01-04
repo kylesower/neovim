@@ -225,6 +225,8 @@ static VTermZCallbacks vtermz_screen_callbacks = {
   .bell = term_bell,
   .theme = term_theme,
   .osc_color = on_osc_color,
+  .on_apc = on_apcz,
+  // .on_dcs = on_dcsz,
 };
 
 static VTermSelectionCallbacks vterm_selection_callbacks = {
@@ -406,7 +408,24 @@ static int on_dcs(const char *command, size_t commandlen, VTermStringFragment fr
   return 1;
 }
 
-// static int on_dcsz(VTermZOscColor osc, void *user) {
+static int on_apcz(const char *buf, size_t len, void *user) {
+  Terminal *term = user;
+
+  if (has_event(EVENT_TERMREQUEST)) {
+
+    kv_size(term->termrequest_buffer) = 0;
+    kv_printf(term->termrequest_buffer, "\x1b_");
+    kv_concat_len(term->termrequest_buffer, buf, len);
+    // Ghostty doesn't give us a convenient way to get the terminator for APC sequences.
+    // Just assume ST.
+    term->termrequest_terminator = VTERM_TERMINATOR_ST; // frag.terminator;
+    schedule_termrequest(term);
+  }
+
+  return 1;
+}
+
+// static int on_dcsz(VTermZDcs dcs, void *user) {
 //   Terminal *term = user;
 //
 //   if (has_event(EVENT_TERMREQUEST)) {
