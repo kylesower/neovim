@@ -2244,100 +2244,34 @@ pub export fn vtermz_keyboard_unichar(vt: *VTerm, ch: u32, vmod: VTermModifier) 
     _ = vt.keyout_buffer_w.consumeAll();
 }
 
+fn ghostty_color_to_termcolor(color: ghostty_vt.Style.Color, type_fallback: u8) VTermColor {
+    return switch (color) {
+        .palette => |idx| .{
+            .indexed = .{
+                .type = c.VTERM_COLOR_INDEXED,
+                .idx = idx,
+            },
+        },
+        .rgb => |col| .{
+            .rgb = .{
+                .type = c.VTERM_COLOR_RGB,
+                .r = col.r,
+                .g = col.g,
+                .b = col.b,
+            },
+        },
+        .none => .{
+            .type = type_fallback,
+        },
+    };
+}
+
 // TODO: make this not horrible
 fn vcell_fg_bg_from_cell(cell: ghostty_vt.RenderState.Cell) struct { VTermColor, VTermColor } {
     const cell_style: ghostty_vt.Style = if (cell.raw.style_id != 0) cell.style else .{};
-    // var res: struct { VTermColor, VTermColor } = .{
-    //     .{ .rgb = .{ .type = c.VTERM_COLOR_DEFAULT_FG } },
-    //     .{ .rgb = .{ .type = c.VTERM_COLOR_DEFAULT_BG } },
-    // };
-    const fg: VTermColor = switch (cell_style.fg_color) {
-        .palette => |idx| .{
-            .indexed = .{
-                .type = c.VTERM_COLOR_INDEXED,
-                .idx = idx,
-            },
-        },
-        .rgb => |col| .{
-            .rgb = .{
-                .type = c.VTERM_COLOR_RGB,
-                .r = col.r,
-                .g = col.g,
-                .b = col.b,
-            },
-        },
-        .none => .{
-            .type = c.VTERM_COLOR_DEFAULT_FG,
-        },
-    };
-    const bg: VTermColor = switch (cell_style.bg_color) {
-        .palette => |idx| .{
-            .indexed = .{
-                .type = c.VTERM_COLOR_INDEXED,
-                .idx = idx,
-            },
-        },
-        .rgb => |col| .{
-            .rgb = .{
-                .type = c.VTERM_COLOR_RGB,
-                .r = col.r,
-                .g = col.g,
-                .b = col.b,
-            },
-        },
-        .none => .{
-            .type = c.VTERM_COLOR_DEFAULT_BG,
-        },
-    };
+    const fg = ghostty_color_to_termcolor(cell_style.fg_color, c.VTERM_COLOR_DEFAULT_FG);
+    const bg = ghostty_color_to_termcolor(cell_style.bg_color, c.VTERM_COLOR_DEFAULT_BG);
     return .{ fg, bg };
-    // if (cell.raw.style_id == 0) {
-    //     res[0].type = c.VTERM_COLOR_DEFAULT_FG;
-    //     res[1].type = c.VTERM_COLOR_DEFAULT_BG;
-    // } else {
-    //     if (cell_style.fg_color == .palette) {
-    //         res[0] = .{
-    //             .indexed = .{
-    //                 .type = c.VTERM_COLOR_INDEXED,
-    //                 .idx = cell_style.fg_color.palette,
-    //             },
-    //         };
-    //     } else {
-    //         const fg = cell_style.fg(.{
-    //             .default = vt.rs.colors.foreground,
-    //             .palette = &vt.rs.colors.palette,
-    //             .bold = null,
-    //         });
-    //         res[0] = .{
-    //             .rgb = .{
-    //                 .type = 0,
-    //                 .r = fg.r,
-    //                 .g = fg.g,
-    //                 .b = fg.b,
-    //             },
-    //         };
-    //     }
-    //     if (cell_style.bg_color == .palette) {
-    //         res[1] = .{
-    //             .indexed = .{
-    //                 .type = c.VTERM_COLOR_INDEXED,
-    //                 .idx = cell_style.bg_color.palette,
-    //             },
-    //         };
-    //     } else if (cell_style.bg(&cell.raw, &vt.rs.colors.palette)) |bg| {
-    //         res[1] = .{
-    //             .rgb = .{
-    //                 .type = 0,
-    //                 .r = bg.r,
-    //                 .g = bg.g,
-    //                 .b = bg.b,
-    //             },
-    //         };
-    //     } else {
-    //         res[1].type = c.VTERM_COLOR_DEFAULT_BG;
-    //     }
-    // }
-    //
-    // return res;
 }
 
 extern fn vterm_screen_cell_setz(src: *const VTermScreenCell, dst: *anyopaque) callconv(.c) void;
@@ -2346,8 +2280,48 @@ extern fn vterm_screen_cell_get_fg(cell: *anyopaque) callconv(.c) c.VTermColor;
 extern fn vterm_screen_cell_get_bg(cell: *anyopaque) callconv(.c) c.VTermColor;
 extern fn vterm_screen_cell_get_schar(cell: *anyopaque) callconv(.c) u32;
 
+fn check_colors_match(expected: c.VTermColor, actual: VTermColor, col: []const u8, check: []const u8) bool {
+    if (expected.type != actual.type) {
+        log.warn(@src(), "{s} colors differ in type for check {s}. Expected {}, got {}", .{
+            col,
+            check,
+            expected,
+            actual,
+        });
+        return false;
+    }
+
+    switch (expected.type) {
+        c.VTERM_COLOR_INDEXED => {
+            if (expected.indexed.idx != actual.indexed.idx) {
+                log.warn(@src(), "{s} colors differ in index for check {s}. Expected {}, got {}", .{
+                    col,
+                    check,
+                    expected,
+                    actual,
+                });
+                return false;
+            }
+        },
+        c.VTERM_COLOR_RGB => {
+            if (expected.rgb.red != actual.rgb.r or expected.rgb.green != actual.rgb.g or expected.rgb.blue != actual.rgb.b) {
+                log.warn(@src(), "{s} colors differ in color for check {s}. Expected {}, got {}", .{
+                    col,
+                    check,
+                    expected,
+                    actual,
+                });
+                return false;
+            }
+        },
+        else => return true,
+    }
+
+    return true;
+}
+
 pub export fn vtermz_screen_get_cell(vt: *VTerm, pos: c.VTermPos, ret: *anyopaque) callconv(.c) c_int {
-    vtermz_refresh(vt);
+    // vtermz_refresh(vt);
     //   ScreenCell *intcell = getcell(screen, pos.row, pos.col);
     //   if (!intcell) {
     //     return 0;
@@ -2360,9 +2334,6 @@ pub export fn vtermz_screen_get_cell(vt: *VTerm, pos: c.VTermPos, ret: *anyopaqu
     // const schar_c = vterm_screen_cell_get_schar(ret);
     if (pos.row < 0 or pos.row >= vt.rs.row_data.len) {
         vterm_screen_cell_setz(&.{}, ret);
-        // std.debug.assert(fg_c.type == c.VTERM_COLOR_DEFAULT_FG);
-        // std.debug.assert(bg_c.type == c.VTERM_COLOR_DEFAULT_BG);
-        // std.debug.assert(bg_c.type == c.VTERM_COLOR_DEFAULT_BG);
         return 0;
     }
 
@@ -2413,6 +2384,7 @@ pub export fn vtermz_screen_get_cell(vt: *VTerm, pos: c.VTermPos, ret: *anyopaqu
         },
         .codepoint_grapheme => {
             // TODO: handle links.
+            // TODO: ZWJ emojis seem to not work in a nested nvim
             var buf: [c.MAX_SCHAR_SIZE]u8 = undefined;
             var idx: usize = 0;
             // log.warn(@src(), "starting to process grapheme cluster of len {d}", .{cell.grapheme.len});
@@ -2436,14 +2408,15 @@ pub export fn vtermz_screen_get_cell(vt: *VTerm, pos: c.VTermPos, ret: *anyopaqu
                     .idx = idx,
                 },
             };
+            // _ = check_colors_match(bg_c, vcell.bg, "bg", "bg_color_palette");
             // if (bg_c.type != c.VTERM_COLOR_INDEXED) {
             //     log.warn(@src(), "bg_c type: expected {} (indexed), got {}", .{ c.VTERM_COLOR_INDEXED, bg_c.type });
+            // } else if (bg_c.indexed.idx != idx) {
+            //     log.warn(@src(), "bg_c type: expected idx {}, got {}", .{ bg_c.indexed.idx, idx });
             // }
             // std.debug.print("checking bg_palette color", .{});
             // std.debug.assert(bg_c.type == c.VTERM_COLOR_INDEXED);
             // std.debug.assert(bg_c.indexed.idx == idx);
-            // std.debug.assert(bg_c.rgb.green == col.g);
-            // std.debug.assert(bg_c.rgb.blue == col.b);
             vterm_screen_cell_setz(&vcell, ret);
             return 1;
         },
@@ -2457,6 +2430,7 @@ pub export fn vtermz_screen_get_cell(vt: *VTerm, pos: c.VTermPos, ret: *anyopaqu
                     .b = col.b,
                 },
             };
+            // _ = check_colors_match(bg_c, vcell.bg, "bg", "bg_color_rgb");
             // if (bg_c.type != c.VTERM_COLOR_RGB) {
             //     log.warn(@src(), "bg_c type: expected {} (RGB), got {}", .{ c.VTERM_COLOR_RGB, bg_c.type });
             // }
@@ -2520,9 +2494,13 @@ pub export fn vtermz_screen_get_cell(vt: *VTerm, pos: c.VTermPos, ret: *anyopaqu
 
     //   cell->fg = intcell->pen.fg;
     //   cell->bg = intcell->pen.bg;
-    const fg, const bg = vcell_fg_bg_from_cell(cell);
-    vcell.fg = fg;
-    vcell.bg = bg;
+    vcell.fg, vcell.bg = vcell_fg_bg_from_cell(cell);
+    // if (!check_colors_match(fg_c, fg, "fg", "fg from cell")) {
+    //   log.warn(@src(), "fg color doesn't match for schar: {c}", .{@as(u8, @intCast(vcell.schar))});
+    // }
+    // if (!check_colors_match(bg_c, bg, "bg", "bg from cell")) {
+    //   log.warn(@src(), "bg color doesn't match for schar: {c}", .{@as(u8, @intCast(vcell.schar))});
+    // }
     // std.debug.print("checking fg type", .{});
     // std.debug.assert(fg_c.type == fg.type);
     // std.debug.print("checking fg value", .{});
