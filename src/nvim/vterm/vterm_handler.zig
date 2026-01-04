@@ -544,6 +544,7 @@ pub const Handler = struct {
         self: *Handler,
         request: kitty_color.OSC,
     ) !void {
+        // TODO: create callback for this
         for (request.list.items) |item| {
             switch (item) {
                 .set => |v| switch (v.key) {
@@ -582,7 +583,6 @@ pub const Handler = struct {
         // For the below, we quack as a VT220. We don't quack as
         // a 420 because we don't support DCS sequences.
         switch (req) {
-            .primary =>
             // 62 = Level 2 conformance
             // 22 = Color text
             // 52 = Clipboard access
@@ -591,9 +591,8 @@ pub const Handler = struct {
             //     "\x1B[?62;22;52c"
             // else
             //     "\x1B[?62;22c",
-            self.term_send("\x1B[?62;22;52c"),
+            .primary => self.term_send("\x1B[?62;22;52c"),
             .secondary => self.term_send("\x1B[>1;10;0c"),
-
             else => log.warn_scoped(@src(), .vterm_handler, "unimplemented device attributes req: {}", .{req}),
         }
     }
@@ -602,6 +601,9 @@ pub const Handler = struct {
         self: *Handler,
         req: ghostty_vt.device_status.Request,
     ) !void {
+        var buf: [64]u8 = undefined;
+        var bufw = std.Io.Writer.fixed(&buf);
+
         switch (req) {
             .operating_status => self.term_send("\x1B[0n"),
 
@@ -616,20 +618,10 @@ pub const Handler = struct {
                     .x = self.terminal.screens.active.cursor.x,
                     .y = self.terminal.screens.active.cursor.y,
                 };
-                _ = pos;
 
-                // TODO: write msg
-                // Response always is at least 4 chars, so this leaves the
-                // remainder for the row/column as base-10 numbers. This
-                // will support a very large terminal.
-                // var msg: termio.Message = .{ .write_small = .{} };
-                // const resp = try std.fmt.bufPrint(&msg.write_small.data, "\x1B[{};{}R", .{
-                //     pos.y + 1,
-                //     pos.x + 1,
-                // });
-                // msg.write_small.len = @intCast(resp.len);
-                //
-                // self.messageWriter(msg);
+                bufw.print("\x1B[{};{}R", .{ pos.y + 1, pos.x + 1 }) catch return;
+                self.term_send(bufw.buffered());
+                _ = bufw.consumeAll();
             },
 
             // TODO: write msg
@@ -804,12 +796,11 @@ pub const Handler = struct {
                 try writer.writeAll("\x1b\\");
 
                 // Write the response prefix into the buffer
-                // _ = try std.fmt.bufPrint(response[0..prefix_len], prefix_fmt, .{@intFromBool(valid)});
                 // const msg = try termio.Message.writeReq(self.alloc, response[0..stream.pos]);
-                // TODO: fix
-                _ = valid;
-                // const msg = "";
                 // self.messageWriter(msg);
+                // TODO: make sure this works
+                _ = try std.fmt.bufPrint(response[0..prefix_len], prefix_fmt, .{@intFromBool(valid)});
+                self.term_send(response[0..stream.pos]);
             },
         }
     }
@@ -840,6 +831,9 @@ pub const Handler = struct {
             // },
         }
     }
+
+    // TODO: running nvim inside terminal, cursor doesn't move in Command mode. Figure out
+    // what's happening.
     fn cbMoveCursor(self: *Handler) void {
         if (self.callbacks.movecursor) |movecursor| {
             const x = self.terminal.screens.active.cursor.x;
@@ -847,7 +841,6 @@ pub const Handler = struct {
             _ = movecursor(
                 y,
                 x,
-
                 self.cbdata,
             );
         }
