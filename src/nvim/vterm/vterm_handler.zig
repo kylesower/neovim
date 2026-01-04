@@ -104,59 +104,61 @@ pub const Handler = struct {
         comptime action: Action.Tag,
         value: Action.Value(action),
     ) !void {
+        const cursor_init = self.terminal.screens.active.cursor;
         switch (action) {
             .print => try self.terminal.print(value.cp),
             .print_repeat => try self.terminal.printRepeat(value),
-            .backspace => self.terminal.backspace(),
-            .carriage_return => self.terminal.carriageReturn(),
-            .linefeed => try self.terminal.linefeed(),
-            .index => try self.terminal.index(),
+            .backspace => {
+                self.terminal.backspace();
+            },
+            .carriage_return => {
+                self.terminal.carriageReturn();
+            },
+            .linefeed => {
+                try self.terminal.linefeed();
+            },
+            .index => {
+                try self.terminal.index();
+            },
             .next_line => {
                 try self.terminal.index();
                 self.terminal.carriageReturn();
             },
-            .reverse_index => self.terminal.reverseIndex(),
+            .reverse_index => {
+                self.terminal.reverseIndex();
+            },
             .cursor_up => {
                 self.terminal.cursorUp(value.value);
-                self.cbMoveCursor();
             },
             .cursor_down => {
                 self.terminal.cursorDown(value.value);
-                self.cbMoveCursor();
             },
             .cursor_left => {
                 self.terminal.cursorLeft(value.value);
-                self.cbMoveCursor();
             },
             .cursor_right => {
                 self.terminal.cursorRight(value.value);
-                self.cbMoveCursor();
             },
             .cursor_pos => {
                 self.terminal.setCursorPos(value.row, value.col);
-                self.cbMoveCursor();
             },
             .cursor_col => {
                 self.terminal.setCursorPos(self.terminal.screens.active.cursor.y + 1, value.value);
-                self.cbMoveCursor();
             },
             .cursor_row => {
                 self.terminal.setCursorPos(value.value, self.terminal.screens.active.cursor.x + 1);
-                self.cbMoveCursor();
             },
             .cursor_col_relative => {
                 self.terminal.setCursorPos(
                     self.terminal.screens.active.cursor.y + 1,
                     self.terminal.screens.active.cursor.x + 1 +| value.value,
                 );
-                self.cbMoveCursor();
             },
             .cursor_row_relative => {
                 self.terminal.setCursorPos(
                     self.terminal.screens.active.cursor.y + 1 +| value.value,
                     self.terminal.screens.active.cursor.x + 1,
                 );
-                self.cbMoveCursor();
             },
             .cursor_style => {
                 const blink = switch (value) {
@@ -212,7 +214,6 @@ pub const Handler = struct {
             .save_cursor => self.terminal.saveCursor(),
             .restore_cursor => {
                 try self.terminal.restoreCursor();
-                self.cbMoveCursor();
             },
             .invoke_charset => self.terminal.invokeCharset(value.bank, value.charset, value.locking),
             .configure_charset => self.terminal.configureCharset(value.slot, value.charset),
@@ -280,6 +281,18 @@ pub const Handler = struct {
             .title_pop,
             => {},
         }
+
+        const cursor_x = self.terminal.screens.active.cursor.x;
+        const cursor_y = self.terminal.screens.active.cursor.y;
+        if (cursor_x != cursor_init.x or cursor_y != cursor_init.y) {
+            if (self.callbacks.movecursor) |movecursor| {
+                _ = movecursor(
+                    cursor_y,
+                    cursor_x,
+                    self.cbdata,
+                );
+            }
+        }
     }
 
     inline fn horizontalTab(self: *Handler, count: u16) !void {
@@ -288,7 +301,6 @@ pub const Handler = struct {
             try self.terminal.horizontalTab();
             if (x == self.terminal.screens.active.cursor.x) break;
         }
-        self.cbMoveCursor();
     }
 
     inline fn horizontalTabBack(self: *Handler, count: u16) !void {
@@ -297,7 +309,6 @@ pub const Handler = struct {
             try self.terminal.horizontalTabBack();
             if (x == self.terminal.screens.active.cursor.x) break;
         }
-        self.cbMoveCursor();
     }
 
     fn setMode(self: *Handler, mode: modes.Mode, enabled: bool) !void {
@@ -312,7 +323,6 @@ pub const Handler = struct {
 
             .origin => {
                 self.terminal.setCursorPos(1, 1);
-                self.cbMoveCursor();
             },
 
             .enable_left_and_right_margin => if (!enabled) {
@@ -328,7 +338,6 @@ pub const Handler = struct {
                 self.terminal.saveCursor();
             } else {
                 try self.terminal.restoreCursor();
-                self.cbMoveCursor();
             },
 
             .enable_mode_3 => {},
@@ -829,20 +838,6 @@ pub const Handler = struct {
             //         }
             //     }
             // },
-        }
-    }
-
-    // TODO: running nvim inside terminal, cursor doesn't move in Command mode. Figure out
-    // what's happening.
-    fn cbMoveCursor(self: *Handler) void {
-        if (self.callbacks.movecursor) |movecursor| {
-            const x = self.terminal.screens.active.cursor.x;
-            const y = self.terminal.screens.active.cursor.y;
-            _ = movecursor(
-                y,
-                x,
-                self.cbdata,
-            );
         }
     }
 };
