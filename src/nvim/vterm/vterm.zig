@@ -717,7 +717,7 @@ pub const VTermScreenCellAttrs = extern struct {
 // // } VTermScreenCell;
 pub const VTermScreenCell = extern struct {
     schar: u32 = 0,
-    width: u8 = 0,
+    width: c_char = 0,
     attrs: VTermScreenCellAttrs = .{},
     fg: VTermColor = .{ .type = 0 },
     bg: VTermColor = .{ .type = 0 },
@@ -1888,23 +1888,27 @@ pub export fn vtermz_teardown() callconv(.c) void {
     _ = gpa.deinit();
 }
 
-// fn bytes_hex_leak(vt: *VTerm, bytes: []const u8) []u8 {
-//     var buf = vt.allocator.alloc(u8, bytes.len * 3) catch @panic("oom");
-//     var idx: usize = 0;
-//     for (bytes) |b| {
-//         const digits = std.fmt.hex(b);
-//         buf[idx] = digits[0];
-//         buf[idx + 1] = digits[1];
-//         buf[idx + 2] = ' ';
-//         idx += 3;
-//     }
-//
-//     return buf[0 .. @max(1, idx) - 1];
-// }
+fn bytes_hex_leak(vt: *VTerm, bytes: []const u8) []u8 {
+    var buf = vt.allocator.alloc(u8, bytes.len * 3) catch @panic("oom");
+    var idx: usize = 0;
+    for (bytes) |b| {
+        const digits = std.fmt.hex(b);
+        buf[idx] = digits[0];
+        buf[idx + 1] = digits[1];
+        buf[idx + 2] = ' ';
+        idx += 3;
+    }
+
+    return buf[0 .. @max(1, idx) - 1];
+}
 
 pub export fn vtermz_input_write(vt: *VTerm, bytes: [*]const u8, len: usize) callconv(.c) usize {
     // TODO: handle errors
-    // log.warn(@src(), "writing input to term: {s}", .{bytes_hex_leak(vt, bytes[0..len])});
+    // if (std.mem.containsAtLeastScalar(u8, bytes[0..len], 1, 0x00)) {
+    //     log.warn(@src(), "input contains null byte!", .{});
+    // } else {
+    //     log.warn(@src(), "input: {s}", .{bytes[0..len]});
+    // }
     vt.s.nextSlice(bytes[0..len]) catch {};
     return 0;
 }
@@ -2241,7 +2245,7 @@ pub export fn vtermz_keyboard_unichar(vt: *VTerm, ch: u32, vmod: VTermModifier) 
 }
 
 // TODO: make this not horrible
-fn vcell_fg_bg_from_cell(vt: *VTerm, cell: ghostty_vt.RenderState.Cell) struct { VTermColor, VTermColor } {
+fn vcell_fg_bg_from_cell(vt: *const VTerm, cell: ghostty_vt.RenderState.Cell) struct { VTermColor, VTermColor } {
     const cell_style: ghostty_vt.Style = if (cell.raw.style_id != 0) cell.style else .{};
     var res: struct { VTermColor, VTermColor } = .{
         .{ .rgb = .{ .type = c.VTERM_COLOR_DEFAULT_FG } },
@@ -2297,13 +2301,22 @@ fn vcell_fg_bg_from_cell(vt: *VTerm, cell: ghostty_vt.RenderState.Cell) struct {
     return res;
 }
 
-pub export fn vtermz_screen_get_cell(vt: *VTerm, pos: VTermPos, ret: *anyopaque) callconv(.c) c_int {
+extern fn vterm_screen_cell_setz(src: *VTermScreenCell, dst: *anyopaque) callconv(.c) void;
+extern fn vterm_screen_cell_set_width(cell: *anyopaque, width: c_char) callconv(.c) void;
+
+// int vtermz_screen_get_cell(const VTermZ *screen, VTermPos pos, void *cell);
+pub export fn vtermz_screen_get_cell(vt: *const VTerm, pos: c.VTermPos, ret: *anyopaque) callconv(.c) c_int {
     //   ScreenCell *intcell = getcell(screen, pos.row, pos.col);
     //   if (!intcell) {
     //     return 0;
     //   }
-    // TODO: refactor caller so we can actually make use of MultiArrayLists
+    // Set width to 1 in case the caller asks for a cell that's beyond the rows or cols
+    // of the current render state. It's possible for the render state to have fewer
+    // rows than the VT.
+    vterm_screen_cell_set_width(ret, 1);
     if (pos.row < 0 or pos.row >= vt.rs.row_data.len) return 0;
+
+    // TODO: refactor caller so we can actually make use of MultiArrayLists
     const cell_row: ghostty_vt.RenderState.Row = vt.rs.row_data.get(@intCast(pos.row));
 
     if (pos.col < 0 or pos.col >= cell_row.cells.len) return 0;
@@ -2313,7 +2326,7 @@ pub export fn vtermz_screen_get_cell(vt: *VTerm, pos: VTermPos, ret: *anyopaque)
 
     const cell_style: ghostty_vt.Style = if (cell.raw.style_id != 0) cell.style else .{};
     if (cell.raw.hyperlink) {
-        std.debug.print("got a hyperlink!", .{});
+        // std.debug.print("got a hyperlink!", .{});
         // var link_buf: [512]u8 = undefined;
         // var idx: usize = 0;
         // for (cell.grapheme) |g| {
@@ -2323,6 +2336,7 @@ pub export fn vtermz_screen_get_cell(vt: *VTerm, pos: VTermPos, ret: *anyopaque)
     }
 
     //   cell->schar = (intcell->schar == (uint32_t)-1) ? 0 : intcell->schar;
+    // TODO: figure out if we can handle schars more efficiently
     switch (cell.raw.content_tag) {
         .codepoint => {
             const codepoint = cell.raw.content.codepoint;
@@ -2462,10 +2476,8 @@ pub export fn vtermz_screen_get_cell(vt: *VTerm, pos: VTermPos, ret: *anyopaque)
     //     }
     // }
 
-    c.vterm_screen_cell_setz(&vcell, ret);
+    vterm_screen_cell_setz(&vcell, ret);
 
-    //
-    //   return 1;
     return 1;
 }
 

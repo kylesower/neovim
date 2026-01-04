@@ -1318,7 +1318,7 @@ void terminal_get_line_attributes(Terminal *term, win_T *wp, int linenr, int *te
 
   width = MIN(TERM_ATTRS_MAX, width);
   for (int col = 0; col < width; col++) {
-    VTermScreenCell cell;
+    VTermScreenCell cell = {0};
     bool color_valid = fetch_cell(term, row, col, &cell);
     bool fg_default = !color_valid || VTERM_COLOR_IS_DEFAULT_FG(&cell.fg);
     bool bg_default = !color_valid || VTERM_COLOR_IS_DEFAULT_BG(&cell.bg);
@@ -2141,7 +2141,7 @@ static void fetch_row(Terminal *term, int row, int end_col)
   char *ptr = term->textbuf;
 
   while (col < end_col) {
-    VTermScreenCell cell;
+    VTermScreenCell cell = {0};
     fetch_cell(term, row, col, &cell);
     if (cell.schar) {
       schar_get_adv(&ptr, cell.schar);
@@ -2171,8 +2171,8 @@ static bool fetch_cell(Terminal *term, int row, int col, VTermScreenCell *cell)
       return false;
     }
   } else {
-    vterm_screen_get_cell(term->vts, (VTermPos){ .row = row, .col = col },
-                          cell);
+    // vterm_screen_get_cell(term->vts, (VTermPos){ .row = row, .col = col },
+    //                       cell);
     vtermz_screen_get_cell(term->vtz, (VTermPos){ .row = row, .col = col },
                           cell);
   }

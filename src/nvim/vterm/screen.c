@@ -1124,34 +1124,12 @@ int rect_intersects(VTermRect *a, VTermRect *b)
   return 1;
 }
 
-
-typedef struct {
-  bool bold;
-  uint8_t underline;
-  bool italic;
-  bool blink;
-  bool reverse;
-  bool conceal;
-  bool strike;
-  uint8_t font;
-  bool dwl;
-  uint8_t dhl;
-  bool small;
-  uint8_t baseline;
-} VTermScreenCellAttrsZ;
-
-typedef struct {
-  schar_T schar;
-  char width;
-  VTermScreenCellAttrsZ attrs;
-  VTermColor fg, bg;
-  int uri;
-} VTermScreenCellZ;
+void vterm_screen_cell_set_width(VTermScreenCell *cell, char width) {
+  cell->width = width;
+}
 
 // TODO: see if I can avoid this function once I get the width worked out
-void vterm_screen_cell_setz(void *srcz, void *dstc) {
-  VTermScreenCellZ *src = (VTermScreenCellZ *)srcz;
-  VTermScreenCell *dst  = (VTermScreenCell *)dstc;
+void vterm_screen_cell_setz(VTermScreenCellZ *src, VTermScreenCell *dst) {
   dst->schar            = src->schar;
   dst->uri              = src->uri;
   // TODO: figure out how this works.
