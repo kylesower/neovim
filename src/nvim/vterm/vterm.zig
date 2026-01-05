@@ -17,7 +17,7 @@
 const std = @import("std");
 const ghostty_vt = @import("ghostty-vt");
 pub const c = @import("../root.zig").c;
-const log = @import("../root.zig").log;
+const log = @import("../root.zig").log.scoped(.vterm);
 const vterm_handler = @import("../root.zig").handler;
 const Handler = vterm_handler.Handler;
 const Stream = vterm_handler.Stream;
@@ -1824,6 +1824,7 @@ else
 // DONE
 pub export fn vtermz_new(rows: c_int, cols: c_int) callconv(.c) *VTerm {
     const alloc = gpa_alloc;
+
     const t = alloc.create(ghostty_vt.Terminal) catch preserve_exit(e_outofmem);
     var t_modes = ghostty_vt.modes.ModeState{};
     t_modes.set(.grapheme_cluster, true);
@@ -1855,9 +1856,6 @@ pub export fn vtermz_free(vt: *VTerm) callconv(.c) void {
     vt.s.deinit();
     vt.allocator.destroy(vt.t);
     vt.allocator.destroy(vt);
-    if (builtin.is_test) {
-        vtermz_teardown();
-    }
 }
 
 pub export fn vtermz_refresh(vt: *VTerm) callconv(.c) void {
@@ -1884,11 +1882,11 @@ fn bytes_hex_leak(vt: *VTerm, bytes: []const u8) []u8 {
 
 pub export fn vtermz_input_write(vt: *VTerm, bytes: [*]const u8, len: usize) callconv(.c) usize {
     // TODO: handle errors
-    // if (std.mem.containsAtLeastScalar(u8, bytes[0..len], 1, 0x00)) {
-    //     log.warn(@src(), "input contains null byte!", .{});
-    // } else {
-    //     log.warn(@src(), "input: {s}", .{bytes[0..len]});
-    // }
+    if (std.mem.containsAtLeastScalar(u8, bytes[0..len], 1, 0x00)) {
+        log.warn(@src(), "input contains null byte!", .{});
+    } else {
+        log.warn(@src(), "input: {s}", .{bytes[0..len]});
+    }
     vt.s.nextSlice(bytes[0..len]) catch {};
     return 0;
 }
@@ -2328,13 +2326,23 @@ pub export fn vtermz_fill_buf_row_utf8(
         const grapheme = cells_grapheme[col_idx];
         switch (cell_raw.content_tag) {
             .codepoint => {
+                if (cell_raw.content.codepoint == 0) {
+                    buf[idx] = ' ';
+                    idx += 1;
+                    col_idx += 1;
+                    continue;
+                }
                 const start_idx = idx;
                 idx += std.unicode.utf8Encode(cell_raw.content.codepoint, buf[idx..buf_max_len]) catch return idx;
-                log.warn(@src(), "row={d}, col_idx={d}: put single grapheme: {s}", .{ row, col_idx, buf[start_idx..idx] });
+                log.warn(
+                    @src(),
+                    "row={d}, col_idx={d}: put single grapheme: {s} ({any}) (w={})",
+                    .{ row, col_idx, buf[start_idx..idx], buf[start_idx..idx], cell_raw.gridWidth() },
+                );
             },
             .codepoint_grapheme => {
                 // TODO: handle links.
-                // TODO: ZWJ emojis seem to not work in a nested nvim
+                // TODO: keycap emojis seem to not work in a nested nvim
                 const start_idx = idx;
                 idx += std.unicode.utf8Encode(cell_raw.content.codepoint, buf[idx..buf_max_len]) catch return idx;
                 for (grapheme) |g| {
@@ -2357,6 +2365,9 @@ pub export fn vtermz_fill_buf_row_utf8(
         }
         col_idx += width;
     }
+    // const keycaps = "\x30\xef\xb8\x8f\xe2\x83\xa3\x31\xef\xb8\x8f\xe2\x83\xa3";
+    // @memcpy(buf[idx..idx + keycaps.len], keycaps);
+    // idx += keycaps.len;
 
     return idx;
 }
@@ -2644,48 +2655,6 @@ pub export fn vtermz_screen_get_cell(vt: *VTerm, pos: c.VTermPos, ret: *anyopaqu
     return 1;
 }
 
-test "vterm" {
-    const vt = vtermz_new(40, 80);
-    defer vtermz_free(vt);
-
-    // const osc_4 = "\x1b]4;1;?\x1b\\\x1b]4;2;?\x1b\\\x1b[1;31m";
-    const osc_4 = "\x1b]4;1;?\x1b\x1b]4;2;?\x1b\\\x1b]4;3;?\x07\x1b7\x1b[1;31m\x1b(0\x1b(B\x1b[H";
-    const bel = "\x07";
-    const bs = "\x08";
-    const ht = "\x09";
-    const lf = "\x0a";
-    const cr = "\x0d";
-    const ind = "\x1bD";
-    const nel = "\x1bE";
-    const hts = "\x1bH";
-    const dcs = "\x1bP\x1bP\x1bP";
-    const st = "\x1b\\";
-    // const more = "\x84\x85\x88\x9c\x9c\x9c\x9d4;1;?\x9c\\";
-    const esc_seq = "\x1b(0\x1b(B\x1b(A\x1b(0";
-    const apc_seq = "\x1b_nvim;stuff;ARSITENARISENTIAERNSTIEARNST\x1b\\";
-    const commands: []const []const u8 = &.{
-        osc_4,
-        bel,
-        bs,
-        ht,
-        lf,
-        cr,
-        ind,
-        nel,
-        hts,
-        dcs,
-        st,
-        esc_seq,
-        apc_seq,
-    };
-
-    var res: usize = 0;
-    for (commands) |cmd| {
-        res = vtermz_input_write(vt, cmd.ptr, cmd.len);
-    }
-    // try std.testing.expectEqual(res, 1);
-}
-
 pub export fn vtermz_update(vt: *VTerm) callconv(.c) void {
     vt.rs.update(vt.allocator, vt.t) catch preserve_exit(e_outofmem);
 }
@@ -2804,3 +2773,120 @@ pub export fn vtermz_state_set_palette_color(vt: *VTerm, index: c_int, col: *con
 //   }
 //   return 0;  // UNREACHABLE
 // }
+//
+
+test "vterm" {
+    const vt = vtermz_new(40, 80);
+    defer vtermz_free(vt);
+
+    // const osc_4 = "\x1b]4;1;?\x1b\\\x1b]4;2;?\x1b\\\x1b[1;31m";
+    const osc_4 = "\x1b]4;1;?\x1b\x1b]4;2;?\x1b\\\x1b]4;3;?\x07\x1b7\x1b[1;31m\x1b(0\x1b(B\x1b[H";
+    const bel = "\x07";
+    const bs = "\x08";
+    const ht = "\x09";
+    const lf = "\x0a";
+    const cr = "\x0d";
+    const ind = "\x1bD";
+    const nel = "\x1bE";
+    const hts = "\x1bH";
+    const dcs = "\x1bP\x1bP\x1bP";
+    const st = "\x1b\\";
+    // const more = "\x84\x85\x88\x9c\x9c\x9c\x9d4;1;?\x9c\\";
+    const esc_seq = "\x1b(0\x1b(B\x1b(A\x1b(0";
+    const apc_seq = "\x1b_nvim;stuff;ARSITENARISENTIAERNSTIEARNST\x1b\\";
+    const commands: []const []const u8 = &.{
+        osc_4,
+        bel,
+        bs,
+        ht,
+        lf,
+        cr,
+        ind,
+        nel,
+        hts,
+        dcs,
+        st,
+        esc_seq,
+        apc_seq,
+    };
+
+    var res: usize = 0;
+    for (commands) |cmd| {
+        res = vtermz_input_write(vt, cmd.ptr, cmd.len);
+    }
+    // try std.testing.expectEqual(res, 1);
+}
+
+test "utf8 keycaps" {
+    // This is a sequence that produced malformed output when opening a file in a nested
+    // neovim instance. It moves the cursor manually after every keycap.
+    // Oh... I'm pretty sure nvim is getting its positioning wrong. Looks like
+    // an off by one. I'm not sure how Ghostty or libvterm normally handle it to make it
+    // not broken. Maybe theres some kind of mode I'm missing.
+    // 00e3da00: 4b65 7963 6170 733a 1b5b 4b0d 0a30 efb8  Keycaps:.[K..0..
+    // 00e3da10: 8fe2 83a3 1b5b 323b 3248 2031 efb8 8fe2  .....[2;2H 1....
+    // 00e3da20: 83a3 1b5b 323b 3448 2032 efb8 8fe2 83a3  ...[2;4H 2......
+    // 00e3da30: 1b5b 323b 3648 2033 efb8 8fe2 83a3 1b5b  .[2;6H 3.......[
+    // Even when I run this printf manually in the terminal, it doesn't seem to produce the right
+    // output. The keycaps are overlapping even though it seems like the data should be
+    // correct from the logs.
+    // printf "\x1b7\x1b[3;1H\x30\xef\xb8\x8f\xe2\x83\xa3\x1b[3;3H\x31\xef\xb8\x8f\xe2\x83\xa3\x1b8"
+    // Logs showed this: 
+    // warning (vterm): vtermz_fill_buf_row_utf8:2351: row=2, col_idx=0: put multi grapheme:  0️⃣
+    // warning (vterm): vtermz_fill_buf_row_utf8:2364: row=2, col_idx=0: extra width: 2
+    // warning (vterm): vtermz_fill_buf_row_utf8:2351: row=2, col_idx=2: put multi grapheme:  1️⃣
+    // warning (vterm): vtermz_fill_buf_row_utf8:2364: row=2, col_idx=2: extra width: 2
+
+    const vt = vtermz_new(3, 20);
+    defer vtermz_free(vt);
+    var out_buf: [256]u8 = undefined;
+
+    // 31 = ASCII digit "1"
+    // EF B8 8F = Variation Selector-16
+    // E2 83 A3 = Combining Enclosing Keycap
+    const keycap_main = "\xef\xb8\x8f\xe2\x83\xa3";
+    const keycap_0 = "\x30" ++ keycap_main;
+    const keycap_1 = "\x31" ++ keycap_main;
+    const keycap_2 = "\x32" ++ keycap_main;
+    const keycap_3 = "\x33" ++ keycap_main;
+    try std.testing.expectEqual(0, vt.t.screens.active.cursor.x);
+    try std.testing.expectEqual(0, vt.t.screens.active.cursor.y);
+    var moveCursor = "\x1b[1;2H";
+    _ = vtermz_input_write(vt, moveCursor, moveCursor.len);
+    try std.testing.expectEqual(1, vt.t.screens.active.cursor.x);
+    moveCursor = "\x1b[1;1H";
+    _ = vtermz_input_write(vt, moveCursor, moveCursor.len);
+    try std.testing.expectEqual(0, vt.t.screens.active.cursor.x);
+    try std.testing.expectEqual(0, vt.t.screens.active.cursor.y);
+    const key0 = keycap_0 ++ "\x1b[1;3H";
+    _ = vtermz_input_write(vt, key0, key0.len);
+    vtermz_refresh(vt);
+    _ = vtermz_fill_buf_row_utf8(vt, 0, 0, 20, &out_buf, out_buf.len);
+    try std.testing.expectEqualSlices(u8, keycap_0, out_buf[0..keycap_0.len]);
+    const key1 = keycap_1 ++ "\x1b[1;5H";
+    _ = vtermz_input_write(vt, key1, key1.len);
+    vtermz_refresh(vt);
+    _ = vtermz_fill_buf_row_utf8(vt, 0, 0, 20, &out_buf, out_buf.len);
+    try std.testing.expectEqualSlices(u8, keycap_0 ++ keycap_1, out_buf[0 .. 2 * keycap_0.len]);
+    const key2 = keycap_2 ++ "\x1b[1;7H";
+    _ = vtermz_input_write(vt, key2, key2.len);
+    vtermz_refresh(vt);
+    _ = vtermz_fill_buf_row_utf8(vt, 0, 0, 20, &out_buf, out_buf.len);
+    try std.testing.expectEqualSlices(u8, keycap_0 ++ keycap_1 ++ keycap_2, out_buf[0 .. 3 * keycap_0.len]);
+    const key3 = keycap_3;
+    _ = vtermz_input_write(vt, key3, key3.len);
+    vtermz_refresh(vt);
+    _ = vtermz_fill_buf_row_utf8(vt, 0, 0, 20, &out_buf, out_buf.len);
+    try std.testing.expectEqualSlices(u8, keycap_0 ++ keycap_1 ++ keycap_2 ++ keycap_3, out_buf[0 .. 4 * keycap_0.len]);
+
+    // const all_keycaps = // "\r\n" ++ //"\x1b[2;1H" ++
+    //     keycap_0 ++ "\x1b[1;2H" ++ " " ++
+    //     keycap_1 ++ "\x1b[1;4H" ++ " " ++
+    //     keycap_2 ++ "\x1b[1;6H" ++ " " ++
+    //     keycap_3;
+    // _ = vtermz_input_write(vt, all_keycaps, all_keycaps.len);
+    // vtermz_refresh(vt);
+    // _ = vtermz_fill_buf_row_utf8(vt, 0, 0, 20, &out_buf, out_buf.len);
+    // const expected = keycap_0 ++ " " ++ keycap_1 ++ " " ++ keycap_2 ++ " " ++ keycap_3;
+    // try std.testing.expectEqualSlices(u8, expected, out_buf[0..expected.len]);
+}
