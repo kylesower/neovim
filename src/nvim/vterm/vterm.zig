@@ -2321,6 +2321,58 @@ fn check_colors_match(expected: c.VTermColor, actual: VTermColor, col: []const u
     return true;
 }
 
+/// Fills buf with utf8 encoded bytes from the terminal on row `row`
+/// from `start_col` to `end_col`.
+/// Returns number of bytes written.
+pub export fn vtermz_fill_buf_row_utf8(
+    vt: *VTerm,
+    row: usize,
+    start_col: usize,
+    /// End col exclusive
+    end_col: usize,
+    buf: [*]u8,
+    buf_max_len: usize,
+) callconv(.c) usize {
+    var idx: usize = 0;
+
+    if (row >= vt.rs.row_data.len or start_col > end_col or end_col == 0) return idx;
+
+    const cell_row: ghostty_vt.RenderState.Row = vt.rs.row_data.get(@intCast(row));
+    const end_col_clamped = @min(end_col, cell_row.cells.len);
+
+    const cells_raw = cell_row.cells.items(.raw);
+    const cells_grapheme = cell_row.cells.items(.grapheme);
+
+    var col_idx = start_col;
+    while (col_idx < end_col_clamped) {
+        const cell_raw = cells_raw[col_idx];
+        const grapheme = cells_grapheme[col_idx];
+        // We advance by the grid width each time, not by 1. Some characters span
+        // a width of 2 cols, but the grapheme data is stored entirely in the first
+        // col that the character occupies.
+        col_idx += cell_raw.gridWidth();
+        switch (cell_raw.content_tag) {
+            .codepoint => {
+                idx += std.unicode.utf8Encode(cell_raw.content.codepoint, buf[idx..buf_max_len]) catch return idx;
+            },
+            .codepoint_grapheme => {
+                // TODO: handle links.
+                // TODO: ZWJ emojis seem to not work in a nested nvim
+                idx += std.unicode.utf8Encode(cell_raw.content.codepoint, buf[idx..buf_max_len]) catch return idx;
+                for (grapheme) |g| {
+                    idx += std.unicode.utf8Encode(g, buf[idx..buf_max_len]) catch return idx;
+                }
+            },
+            .bg_color_palette, .bg_color_rgb => {
+                buf[idx] = ' ';
+                idx += 1;
+            },
+        }
+    }
+
+    return idx;
+}
+
 pub export fn vtermz_screen_get_cell(vt: *VTerm, pos: c.VTermPos, ret: *anyopaque) callconv(.c) c_int {
     // vtermz_refresh(vt);
     //   ScreenCell *intcell = getcell(screen, pos.row, pos.col);

@@ -2156,6 +2156,13 @@ static void fetch_row(Terminal *term, int row, int end_col)
   term->textbuf[line_len] = NUL;
 }
 
+static void fetch_rowz(Terminal *term, int row, int end_col)
+{
+  char *ptr = term->textbuf;
+  size_t line_len = vtermz_fill_buf_row_utf8(term->vtz, (size_t)row, 0, (size_t)end_col, ptr, TEXTBUF_SIZE);
+  term->textbuf[line_len] = NUL;
+}
+
 static bool fetch_cell(Terminal *term, int row, int col, VTermScreenCell *cell)
 {
   if (row < 0) {
@@ -2357,7 +2364,7 @@ static void refresh_scrollback(Terminal *term, buf_T *buf)
   // scrollback wasn't refreshed in time; append these to the top of the buffer.
   int row_offset = term->sb_pending;
   while (term->sb_pending > 0 && buf->b_ml.ml_line_count < height) {
-    fetch_row(term, term->sb_pending - row_offset - 1, width);
+    fetch_rowz(term, term->sb_pending - row_offset - 1, width);
     ml_append_buf(buf, 0, term->textbuf, 0, false);
     appended_lines_buf(buf, 0, 1);
     term->sb_pending--;
@@ -2374,7 +2381,7 @@ static void refresh_scrollback(Terminal *term, buf_T *buf)
       ml_delete_buf(buf, 1, false);
       deleted_lines_buf(buf, 1, 1);
     }
-    fetch_row(term, -term->sb_pending - row_offset, width);
+    fetch_rowz(term, -term->sb_pending - row_offset, width);
     int buf_index = (int)buf->b_ml.ml_line_count - height;
     ml_append_buf(buf, buf_index, term->textbuf, 0, false);
     appended_lines_buf(buf, buf_index, 1);
@@ -2413,7 +2420,7 @@ static void refresh_screen(Terminal *term, buf_T *buf)
 
   for (int r = term->invalid_start, linenr = row_to_linenr(term, r);
        r < term->invalid_end; r++, linenr++) {
-    fetch_row(term, r, width);
+    fetch_rowz(term, r, width);
 
     if (linenr <= buf->b_ml.ml_line_count) {
       ml_replace_buf(buf, linenr, term->textbuf, true, false);
