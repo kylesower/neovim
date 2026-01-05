@@ -1825,33 +1825,12 @@ else
 pub export fn vtermz_new(rows: c_int, cols: c_int) callconv(.c) *VTerm {
     const alloc = gpa_alloc;
     const t = alloc.create(ghostty_vt.Terminal) catch preserve_exit(e_outofmem);
+    var t_modes = ghostty_vt.modes.ModeState{};
+    t_modes.set(.grapheme_cluster, true);
     t.* = ghostty_vt.Terminal.init(alloc, .{
         .rows = @intCast(rows),
         .cols = @intCast(cols),
-        // .colors = .{
-        // .foreground = .init(
-        //     .{
-        //         .r = 0xfa,
-        //         .g = 0xfa,
-        //         .b = 0xfa,
-        //     },
-        // ),
-        // .background = .init(
-        //     .{
-        //         .r = 0x10,
-        //         .g = 0x10,
-        //         .b = 0x10,
-        //     },
-        // ),
-        // .cursor = .init(
-        //     .{
-        //         .r = 0xfa,
-        //         .g = 0xfa,
-        //         .b = 0xfa,
-        //     },
-        // ),
-        // .palette = .default,
-        // },
+        .default_modes = t_modes.values,
     }) catch preserve_exit(e_outofmem);
 
     const rs: ghostty_vt.RenderState = .empty;
@@ -2326,16 +2305,16 @@ fn check_colors_match(expected: c.VTermColor, actual: VTermColor, col: []const u
 /// Returns number of bytes written.
 pub export fn vtermz_fill_buf_row_utf8(
     vt: *VTerm,
-    row: usize,
-    start_col: usize,
+    row: c_int,
+    start_col: c_int,
     /// End col exclusive
-    end_col: usize,
+    end_col: c_int,
     buf: [*]u8,
     buf_max_len: usize,
 ) callconv(.c) usize {
     var idx: usize = 0;
 
-    if (row >= vt.rs.row_data.len or start_col > end_col or end_col == 0) return idx;
+    if (row < 0 or start_col < 0 or row >= vt.rs.row_data.len or start_col > end_col or end_col == 0) return idx;
 
     const cell_row: ghostty_vt.RenderState.Row = vt.rs.row_data.get(@intCast(row));
     const end_col_clamped = @min(end_col, cell_row.cells.len);
@@ -2343,31 +2322,40 @@ pub export fn vtermz_fill_buf_row_utf8(
     const cells_raw = cell_row.cells.items(.raw);
     const cells_grapheme = cell_row.cells.items(.grapheme);
 
-    var col_idx = start_col;
+    var col_idx: usize = @intCast(start_col);
     while (col_idx < end_col_clamped) {
         const cell_raw = cells_raw[col_idx];
         const grapheme = cells_grapheme[col_idx];
-        // We advance by the grid width each time, not by 1. Some characters span
-        // a width of 2 cols, but the grapheme data is stored entirely in the first
-        // col that the character occupies.
-        col_idx += cell_raw.gridWidth();
         switch (cell_raw.content_tag) {
             .codepoint => {
+                const start_idx = idx;
                 idx += std.unicode.utf8Encode(cell_raw.content.codepoint, buf[idx..buf_max_len]) catch return idx;
+                log.warn(@src(), "row={d}, col_idx={d}: put single grapheme: {s}", .{ row, col_idx, buf[start_idx..idx] });
             },
             .codepoint_grapheme => {
                 // TODO: handle links.
                 // TODO: ZWJ emojis seem to not work in a nested nvim
+                const start_idx = idx;
                 idx += std.unicode.utf8Encode(cell_raw.content.codepoint, buf[idx..buf_max_len]) catch return idx;
                 for (grapheme) |g| {
                     idx += std.unicode.utf8Encode(g, buf[idx..buf_max_len]) catch return idx;
                 }
+                log.warn(@src(), "row={d}, col_idx={d}: put multi grapheme:  {s}", .{ row, col_idx, buf[start_idx..idx] });
             },
             .bg_color_palette, .bg_color_rgb => {
+                log.warn(@src(), "row={}, col_idx={}: adding blank space", .{ row, col_idx });
                 buf[idx] = ' ';
                 idx += 1;
             },
         }
+        // We advance by the grid width each time, not by 1. Some characters span
+        // a width of 2 cols, but the grapheme data is stored entirely in the first
+        // col that the character occupies.
+        const width = cell_raw.gridWidth();
+        if (width > 1) {
+            log.warn(@src(), "row={}, col_idx={}: extra width: {d}", .{ row, col_idx, width });
+        }
+        col_idx += width;
     }
 
     return idx;

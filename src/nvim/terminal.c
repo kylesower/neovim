@@ -2159,7 +2159,7 @@ static void fetch_row(Terminal *term, int row, int end_col)
 static void fetch_rowz(Terminal *term, int row, int end_col)
 {
   char *ptr = term->textbuf;
-  size_t line_len = vtermz_fill_buf_row_utf8(term->vtz, (size_t)row, 0, (size_t)end_col, ptr, TEXTBUF_SIZE);
+  size_t line_len = vtermz_fill_buf_row_utf8(term->vtz, row, 0, end_col, ptr, TEXTBUF_SIZE);
   term->textbuf[line_len] = NUL;
 }
 

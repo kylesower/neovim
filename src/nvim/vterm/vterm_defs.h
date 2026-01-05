@@ -416,9 +416,9 @@ VTermColor vterm_screen_cell_get_bg(const VTermScreenCell *cell);
 schar_T vterm_screen_cell_get_schar(const VTermScreenCell *cell);
 size_t vtermz_fill_buf_row_utf8(
     const VTermZ *vt,
-    size_t row,
-    size_t start_col,
-    size_t end_col,
+    int row,
+    int start_col,
+    int end_col,
     char *buf,
     size_t buf_max_len
 );
