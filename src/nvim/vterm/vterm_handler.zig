@@ -113,58 +113,31 @@ pub const Handler = struct {
         switch (action) {
             .print => try self.terminal.print(value.cp),
             .print_repeat => try self.terminal.printRepeat(value),
-            .backspace => {
-                self.terminal.backspace();
-            },
-            .carriage_return => {
-                self.terminal.carriageReturn();
-            },
-            .linefeed => {
-                try self.terminal.linefeed();
-            },
-            .index => {
-                try self.terminal.index();
-            },
+            .backspace => self.terminal.backspace(),
+            .carriage_return => self.terminal.carriageReturn(),
+            .linefeed => try self.terminal.linefeed(),
+            .index => try self.terminal.index(),
             .next_line => {
                 try self.terminal.index();
                 self.terminal.carriageReturn();
             },
-            .reverse_index => {
-                self.terminal.reverseIndex();
-            },
-            .cursor_up => {
-                self.terminal.cursorUp(value.value);
-            },
-            .cursor_down => {
-                self.terminal.cursorDown(value.value);
-            },
-            .cursor_left => {
-                self.terminal.cursorLeft(value.value);
-            },
-            .cursor_right => {
-                self.terminal.cursorRight(value.value);
-            },
-            .cursor_pos => {
-                self.terminal.setCursorPos(value.row, value.col);
-            },
-            .cursor_col => {
-                self.terminal.setCursorPos(self.terminal.screens.active.cursor.y + 1, value.value);
-            },
-            .cursor_row => {
-                self.terminal.setCursorPos(value.value, self.terminal.screens.active.cursor.x + 1);
-            },
-            .cursor_col_relative => {
-                self.terminal.setCursorPos(
-                    self.terminal.screens.active.cursor.y + 1,
-                    self.terminal.screens.active.cursor.x + 1 +| value.value,
-                );
-            },
-            .cursor_row_relative => {
-                self.terminal.setCursorPos(
-                    self.terminal.screens.active.cursor.y + 1 +| value.value,
-                    self.terminal.screens.active.cursor.x + 1,
-                );
-            },
+            .reverse_index => self.terminal.reverseIndex(),
+            .cursor_up => self.terminal.cursorUp(value.value),
+
+            .cursor_down => self.terminal.cursorDown(value.value),
+            .cursor_left => self.terminal.cursorLeft(value.value),
+            .cursor_right => self.terminal.cursorRight(value.value),
+            .cursor_pos => self.terminal.setCursorPos(value.row, value.col),
+            .cursor_col => self.terminal.setCursorPos(self.terminal.screens.active.cursor.y + 1, value.value),
+            .cursor_row => self.terminal.setCursorPos(value.value, self.terminal.screens.active.cursor.x + 1),
+            .cursor_col_relative => self.terminal.setCursorPos(
+                self.terminal.screens.active.cursor.y + 1,
+                self.terminal.screens.active.cursor.x + 1 +| value.value,
+            ),
+            .cursor_row_relative => self.terminal.setCursorPos(
+                self.terminal.screens.active.cursor.y + 1 +| value.value,
+                self.terminal.screens.active.cursor.x + 1,
+            ),
             .cursor_style => {
                 const blink = switch (value) {
                     .default, .steady_block, .steady_bar, .steady_underline => false,
