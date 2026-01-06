@@ -271,9 +271,9 @@ pub const Handler = struct {
             .bell => _ = if (self.callbacks.bell) |bell| bell(self.cbdata),
             .device_attributes => {},
             .device_status => try self.deviceStatusReport(value.request),
+            .request_mode => try self.requestMode(value.mode),
+            .request_mode_unknown => try self.requestModeUnknown(value.mode, value.ansi),
             .enquiry,
-            .request_mode,
-            .request_mode_unknown,
             .size_report,
             .xtversion,
             .kitty_keyboard_query,
@@ -394,6 +394,37 @@ pub const Handler = struct {
 
             else => {},
         }
+    }
+
+    // I think libvterm doesn't actually support this.
+    fn requestMode(self: *Handler, mode: ghostty_vt.modes.Mode) !void {
+        const tag: ghostty_vt.modes.ModeTag = @bitCast(@intFromEnum(mode));
+        const code: u8 = if (self.terminal.modes.get(mode)) 1 else 2;
+
+        var buf: [64]u8 = undefined;
+        const resp = try std.fmt.bufPrint(
+            &buf,
+            "\x1B[{s}{};{}$y",
+            .{
+                if (tag.ansi) "" else "?",
+                tag.value,
+                code,
+            },
+        );
+        self.term_send(resp);
+    }
+
+    fn requestModeUnknown(self: *Handler, mode_raw: u16, ansi: bool) !void {
+        var buf: [64]u8 = undefined;
+        const resp = try std.fmt.bufPrint(
+            &buf,
+            "\x1B[{s}{};0$y",
+            .{
+                if (ansi) "" else "?",
+                mode_raw,
+            },
+        );
+        self.term_send(resp);
     }
 
     fn colorOperation(

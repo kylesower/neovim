@@ -2314,11 +2314,11 @@ pub export fn vtermz_fill_buf_row_utf8(
 
     if (row < 0 or start_col < 0 or row >= vt.rs.row_data.len or start_col > end_col or end_col == 0) return idx;
 
-    const cell_row: ghostty_vt.RenderState.Row = vt.rs.row_data.get(@intCast(row));
-    const end_col_clamped = @min(end_col, cell_row.cells.len);
+    const cell_row = vt.rs.row_data.items(.cells)[@intCast(row)];
+    const end_col_clamped = @min(end_col, cell_row.len);
 
-    const cells_raw = cell_row.cells.items(.raw);
-    const cells_grapheme = cell_row.cells.items(.grapheme);
+    const cells_raw: []ghostty_vt.Cell = cell_row.items(.raw);
+    const cells_grapheme: [][]const u21 = cell_row.items(.grapheme);
 
     var col_idx: usize = @intCast(start_col);
     while (col_idx < end_col_clamped) {
@@ -2348,7 +2348,11 @@ pub export fn vtermz_fill_buf_row_utf8(
                 for (grapheme) |g| {
                     idx += std.unicode.utf8Encode(g, buf[idx..buf_max_len]) catch return idx;
                 }
-                log.warn(@src(), "row={d}, col_idx={d}: put multi grapheme:  {s}", .{ row, col_idx, buf[start_idx..idx] });
+                log.warn(
+                    @src(),
+                    "row={d}, col_idx={d}: put multi grapheme:  {s} ({any})",
+                    .{ row, col_idx, buf[start_idx..idx], buf[start_idx..idx] },
+                );
             },
             .bg_color_palette, .bg_color_rgb => {
                 log.warn(@src(), "row={}, col_idx={}: adding blank space", .{ row, col_idx });
@@ -2365,9 +2369,6 @@ pub export fn vtermz_fill_buf_row_utf8(
         }
         col_idx += width;
     }
-    // const keycaps = "\x30\xef\xb8\x8f\xe2\x83\xa3\x31\xef\xb8\x8f\xe2\x83\xa3";
-    // @memcpy(buf[idx..idx + keycaps.len], keycaps);
-    // idx += keycaps.len;
 
     return idx;
 }
@@ -2831,11 +2832,18 @@ test "utf8 keycaps" {
     // output. The keycaps are overlapping even though it seems like the data should be
     // correct from the logs.
     // printf "\x1b7\x1b[3;1H\x30\xef\xb8\x8f\xe2\x83\xa3\x1b[3;3H\x31\xef\xb8\x8f\xe2\x83\xa3\x1b8"
-    // Logs showed this: 
+    // Logs showed this:
     // warning (vterm): vtermz_fill_buf_row_utf8:2351: row=2, col_idx=0: put multi grapheme:  0️⃣
     // warning (vterm): vtermz_fill_buf_row_utf8:2364: row=2, col_idx=0: extra width: 2
     // warning (vterm): vtermz_fill_buf_row_utf8:2351: row=2, col_idx=2: put multi grapheme:  1️⃣
     // warning (vterm): vtermz_fill_buf_row_utf8:2364: row=2, col_idx=2: extra width: 2
+    //
+    // Okay, I'm not going crazy. nvim incorrectly calculates the width as 1. You can test it with
+    // the following:
+    // const char *keycap0 = "\x30\xef\xb8\x8f\xe2\x83\xa3";
+    //
+    // int cell_count = utf_ptr2cells(keycap0);
+    // assert(cell_count == 2);
 
     const vt = vtermz_new(3, 20);
     defer vtermz_free(vt);

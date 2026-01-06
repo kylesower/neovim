@@ -208,10 +208,20 @@ struct terminal {
   size_t refcount;                  // reference count
 };
 
+// static VTermScreenCallbacks vterm_screen_callbacks = {
+//   .damage = term_damage,
+//   .moverect = term_moverect,
+//   .movecursor = term_movecursor,
+//   .settermprop = term_settermprop,
+//   .bell = term_bell,
+//   .theme = term_theme,
+//   .sb_pushline = term_sb_push,  // Called before a line goes offscreen.
+//   .sb_popline = term_sb_pop,
+// };
 static VTermScreenCallbacks vterm_screen_callbacks = {
   .damage = term_damage,
   .moverect = term_moverect,
-  .movecursor = term_movecursor,
+  .movecursor = NULL,
   .settermprop = term_settermprop,
   .bell = term_bell,
   .theme = term_theme,
@@ -1421,12 +1431,11 @@ static int term_moverect(VTermRect dest, VTermRect src, void *data)
 
 static int term_movecursor(VTermPos new_pos, VTermPos old_pos, int visible, void *data)
 {
-  return 0;
-  // Terminal *term = data;
-  // term->cursor.row = new_pos.row;
-  // term->cursor.col = new_pos.col;
-  // invalidate_terminal(term, -1, -1);
-  // return 1;
+  Terminal *term = data;
+  term->cursor.row = new_pos.row;
+  term->cursor.col = new_pos.col;
+  invalidate_terminal(term, -1, -1);
+  return 1;
 }
 
 static int term_movecursorz(int row, int col, void *data)
