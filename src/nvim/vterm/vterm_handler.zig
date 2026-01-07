@@ -37,7 +37,7 @@ const DcsHandler = ghostty_vt.dcs.Handler;
 const ApcHandler = ghostty_vt.apc.Handler;
 const VTermPos = vterm.VTermPos;
 const VTermProp = vterm.VTermProp;
-const VTermValue = vterm.VTermValue;
+// const VTermValue = vterm.VTermValue;
 const Action = ghostty_vt.StreamAction;
 const Screen = ghostty_vt.Screen;
 // const modes = @import("modes.zig");
@@ -866,11 +866,11 @@ pub const VTermZCallbacks = extern struct {
         col: c_int,
         user: ?*anyopaque,
     ) callconv(.c) c_int = null,
-    settermprop: ?*const fn (
-        prop: VTermProp,
-        val: *VTermValue,
-        user: ?*anyopaque,
-    ) callconv(.c) c_int = null,
+    // settermprop: ?*const fn (
+    //     prop: VTermProp,
+    //     val: *VTermValue,
+    //     user: ?*anyopaque,
+    // ) callconv(.c) c_int = null,
     bell: ?*const fn (user: ?*anyopaque) callconv(.c) c_int = null,
     theme: ?*const fn (dark: *bool, user: ?*anyopaque) callconv(.c) c_int = null,
     osc_color: ?*const fn (osc: VTermZOscColor, user: ?*anyopaque) callconv(.c) c_int = null,

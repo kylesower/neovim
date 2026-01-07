@@ -231,7 +231,7 @@ static VTermScreenCallbacks vterm_screen_callbacks = {
 
 static VTermZCallbacks vtermz_screen_callbacks = {
   .movecursor = term_movecursorz,
-  .settermprop = term_settermprop,
+  // .settermprop = term_settermprop,
   .bell = term_bell,
   .theme = term_theme,
   .osc_color = on_osc_color,
@@ -1312,6 +1312,27 @@ static int get_underline_hl_flag(VTermScreenCellAttrs attrs)
   }
 }
 
+static int get_underline_hl_flagz(uint8_t underline)
+{
+  switch (underline) {
+  case VTERMZ_UNDERLINE_NONE:
+    return 0;
+  case VTERMZ_UNDERLINE_SINGLE:
+    return HL_UNDERLINE;
+  case VTERMZ_UNDERLINE_DOUBLE:
+    return HL_UNDERDOUBLE;
+  case VTERMZ_UNDERLINE_CURLY:
+    return HL_UNDERCURL;
+  case VTERMZ_UNDERLINE_DOTTED:
+    return HL_UNDERDOTTED;
+  case VTERMZ_UNDERLINE_DASHED:
+    return HL_UNDERDASHED;
+  default:
+    return 0;
+  }
+}
+
+#ifndef VTERM_GHOSTTY
 void terminal_get_line_attributes(Terminal *term, win_T *wp, int linenr, int *term_attrs)
 {
   int height, width;
@@ -1377,6 +1398,80 @@ void terminal_get_line_attributes(Terminal *term, win_T *wp, int linenr, int *te
     term_attrs[col] = attr_id;
   }
 }
+#else
+void terminal_get_line_attributes(Terminal *term, win_T *wp, int linenr, int *term_attrs)
+{
+  int height, width;
+  vtermz_get_size(term->vtz, &height, &width);
+  assert(linenr);
+  int row = linenr_to_row(term, linenr);
+  if (row >= height) {
+    // Terminal height was decreased but the change wasn't reflected into the
+    // buffer yet
+    return;
+  }
+
+  width = MIN(TERM_ATTRS_MAX, width);
+  VTermZStyle styles[TERM_ATTRS_MAX];
+  size_t num_cols = vtermz_fill_buf_row_style(term->vtz, row, 0, width, styles, TERM_ATTRS_MAX);
+  for (size_t col = 0; col < num_cols; col++) {
+    VTermZStyle style = styles[col];
+    // VTermScreenCellZ cell = {0};
+    // bool color_valid = fetch_cell(term, row, col, &cell);
+    // bool fg_default = !color_valid || VTERM_COLOR_IS_DEFAULT_FG(&cell.fg);
+    // bool bg_default = !color_valid || VTERM_COLOR_IS_DEFAULT_BG(&cell.bg);
+    bool fg_default = VTERMZ_COLOR_IS_DEFAULT(&style.fg);
+    bool bg_default = VTERMZ_COLOR_IS_DEFAULT(&style.bg);
+
+    // Get the rgb value set by libvterm.
+    // int vt_fg = fg_default ? -1 : get_rgb(state, cell.fg);
+    // int vt_bg = bg_default ? -1 : get_rgb(state, cell.bg);
+    int vt_fg = vtermz_color_rgb_int(term->vtz, style.fg);
+    int vt_bg = vtermz_color_rgb_int(term->vtz, style.bg);
+
+    bool fg_indexed = VTERMZ_COLOR_IS_PALETTE(style.fg);
+    bool bg_indexed = VTERMZ_COLOR_IS_PALETTE(style.bg);
+
+    int16_t vt_fg_idx = fg_indexed ? style.fg.palette.idx + 1 : 0;
+    int16_t vt_bg_idx = bg_indexed ? style.bg.palette.idx + 1 : 0;
+
+    bool fg_set = vt_fg_idx && vt_fg_idx <= 16 && term->color_set[vt_fg_idx - 1];
+    bool bg_set = vt_bg_idx && vt_bg_idx <= 16 && term->color_set[vt_bg_idx - 1];
+    //   WLOG("buf[%d, %d] fg_default: %d, bg_default: %d, fg_indexed: %d, bg_indexed: %d, vt_fg: %d, vt_bg: %d, vt_fg_idx: %d, vt_bg_idx: %d, vt_fg_set: %d, vt_bg_set: %d, fg_type: %d, fg_idx: %d", row, col, fg_default, bg_default, fg_indexed, bg_indexed, vt_fg, vt_bg, vt_fg_idx, vt_bg_idx, (int)fg_set, (int)bg_set, style.fg.type, style.fg.palette.idx);
+
+    int hl_attrs = (style.flags.bold ? HL_BOLD : 0)
+                   | (style.flags.italic ? HL_ITALIC : 0)
+                   | (style.flags.inverse ? HL_INVERSE : 0)
+                   | get_underline_hl_flagz(style.flags.underline_style)
+                   | (style.flags.strikethrough ? HL_STRIKETHROUGH : 0)
+                   | ((fg_indexed && !fg_set) ? HL_FG_INDEXED : 0)
+                   | ((bg_indexed && !bg_set) ? HL_BG_INDEXED : 0);
+
+    int attr_id = 0;
+
+    if (hl_attrs || !fg_default || !bg_default) {
+      attr_id = hl_get_term_attr(&(HlAttrs) {
+        .cterm_ae_attr = (int16_t)hl_attrs,
+        .cterm_fg_color = vt_fg_idx,
+        .cterm_bg_color = vt_bg_idx,
+        .rgb_ae_attr = (int16_t)hl_attrs,
+        .rgb_fg_color = vt_fg,
+        .rgb_bg_color = vt_bg,
+        .rgb_sp_color = -1,
+        .hl_blend = -1,
+        .url = -1,
+      });
+    }
+
+    // TODO: uri
+    // if (cell.uri > 0) {
+    //   attr_id = hl_combine_attr(attr_id, cell.uri);
+    // }
+
+    term_attrs[col] = attr_id;
+  }
+}
+#endif
 
 Buffer terminal_buf(const Terminal *term)
 {

@@ -665,64 +665,6 @@ pub const VTermPos = extern struct {
 // //     uint8_t idx;
 // //   } indexed;
 // // } VTermColor;
-pub const VTermColor = extern union {
-    type: u8,
-    rgb: extern struct {
-        type: u8,
-        r: u8 = 0,
-        g: u8 = 0,
-        b: u8 = 0,
-    },
-    indexed: extern struct {
-        type: u8,
-        idx: u8,
-    },
-};
-
-// typedef struct {
-//   unsigned bold      : 1;
-//   unsigned underline : 2;
-//   unsigned italic    : 1;
-//   unsigned blink     : 1;
-//   unsigned reverse   : 1;
-//   unsigned conceal   : 1;
-//   unsigned strike    : 1;
-//   unsigned font      : 4;  // 0 to 9
-//   unsigned dwl       : 1;  // On a DECDWL or DECDHL line
-//   unsigned dhl       : 2;  // On a DECDHL line (1=top 2=bottom)
-//   unsigned small     : 1;
-//   unsigned baseline  : 2;
-// } VTermScreenCellAttrs;
-pub const VTermScreenCellAttrs = extern struct {
-    bold: bool = false,
-    underline: u8 = 0,
-    italic: bool = false,
-    blink: bool = false,
-    reverse: bool = false,
-    conceal: bool = false,
-    strike: bool = false,
-    font: u8 = 0, // 0 to 9.
-    dwl: bool = false, // On a DECDWL or DECDHL line
-    dhl: u8 = 0, // On a DECDHL line (1=top 2=bottom). was u2
-    small: bool = false,
-    baseline: u8 = 0, // was u2
-};
-
-// // typedef struct {
-// //   schar_T schar;
-// //   char width;
-// //   VTermScreenCellAttrs attrs;
-// //   VTermColor fg, bg;
-// //   int uri;
-// // } VTermScreenCell;
-pub const VTermScreenCell = extern struct {
-    schar: u32 = 0,
-    width: c_char = 1,
-    attrs: VTermScreenCellAttrs = .{},
-    fg: VTermColor = .{ .type = c.VTERM_COLOR_DEFAULT_FG },
-    bg: VTermColor = .{ .type = c.VTERM_COLOR_DEFAULT_BG },
-    uri: c_int = 0,
-};
 //
 // // typedef enum {
 // //   // VTERM_PROP_NONE = 0
@@ -770,13 +712,13 @@ pub const VTermTerminator = enum(u8) {
 // //   VTermTerminator terminator;
 // // } VTermStringFragment;
 // // Sorry, this struct isn't packed nicely...
-pub const VTermStringFragment = extern struct {
-    str: [*]u8,
-    len: u32,
-    initial: bool,
-    final: bool,
-    terminator: VTermTerminator,
-};
+// pub const VTermStringFragment = extern struct {
+//     str: [*]u8,
+//     len: u32,
+//     initial: bool,
+//     final: bool,
+//     terminator: VTermTerminator,
+// };
 //
 // // typedef union {
 // //   int boolean;
@@ -784,12 +726,12 @@ pub const VTermStringFragment = extern struct {
 // //   VTermStringFragment string;
 // //   VTermColor color;
 // // } VTermValue;
-pub const VTermValue = extern union {
-    boolean: c_int,
-    number: c_int,
-    string: VTermStringFragment,
-    color: VTermColor,
-};
+// pub const VTermValue = extern union {
+//     boolean: c_int,
+//     number: c_int,
+//     string: VTermStringFragment,
+//     color: VTermColor,
+// };
 // //
 // // typedef struct {
 // //   int (*damage)(VTermRect rect, void *user);
@@ -1882,11 +1824,11 @@ fn bytes_hex_leak(vt: *VTerm, bytes: []const u8) []u8 {
 
 pub export fn vtermz_input_write(vt: *VTerm, bytes: [*]const u8, len: usize) callconv(.c) usize {
     // TODO: handle errors
-    if (std.mem.containsAtLeastScalar(u8, bytes[0..len], 1, 0x00)) {
-        log.warn(@src(), "input contains null byte!", .{});
-    } else {
-        log.warn(@src(), "input: {s}", .{bytes[0..len]});
-    }
+    // if (std.mem.containsAtLeastScalar(u8, bytes[0..len], 1, 0x00)) {
+    //     log.warn(@src(), "input contains null byte!", .{});
+    // } else {
+    //     log.warn(@src(), "input: {s}", .{bytes[0..len]});
+    // }
     vt.s.nextSlice(bytes[0..len]) catch {};
     return 0;
 }
@@ -2222,80 +2164,44 @@ pub export fn vtermz_keyboard_unichar(vt: *VTerm, ch: u32, vmod: VTermModifier) 
     _ = vt.keyout_buffer_w.consumeAll();
 }
 
-fn ghostty_color_to_termcolor(color: ghostty_vt.Style.Color, type_fallback: u8) VTermColor {
+inline fn ghostty_color_to_termcolor(color: ghostty_vt.Style.Color) c.VTermZColor {
     return switch (color) {
         .palette => |idx| .{
-            .indexed = .{
-                .type = c.VTERM_COLOR_INDEXED,
+            .palette = .{
+                .type = c.VTERMZ_COLOR_PALETTE,
                 .idx = idx,
             },
         },
         .rgb => |col| .{
             .rgb = .{
-                .type = c.VTERM_COLOR_RGB,
+                .type = c.VTERMZ_COLOR_RGB,
                 .r = col.r,
                 .g = col.g,
                 .b = col.b,
             },
         },
         .none => .{
-            .type = type_fallback,
+            .type = c.VTERMZ_COLOR_NONE,
         },
     };
 }
 
-// TODO: make this not horrible
-fn vcell_fg_bg_from_cell(cell: ghostty_vt.RenderState.Cell) struct { VTermColor, VTermColor } {
-    const cell_style: ghostty_vt.Style = if (cell.raw.style_id != 0) cell.style else .{};
-    const fg = ghostty_color_to_termcolor(cell_style.fg_color, c.VTERM_COLOR_DEFAULT_FG);
-    const bg = ghostty_color_to_termcolor(cell_style.bg_color, c.VTERM_COLOR_DEFAULT_BG);
-    return .{ fg, bg };
-}
-
-extern fn vterm_screen_cell_setz(src: *const VTermScreenCell, dst: *anyopaque) callconv(.c) void;
-extern fn vterm_screen_cell_set_width(cell: *anyopaque, width: c_char) callconv(.c) void;
-extern fn vterm_screen_cell_get_fg(cell: *anyopaque) callconv(.c) c.VTermColor;
-extern fn vterm_screen_cell_get_bg(cell: *anyopaque) callconv(.c) c.VTermColor;
-extern fn vterm_screen_cell_get_schar(cell: *anyopaque) callconv(.c) u32;
-
-fn check_colors_match(expected: c.VTermColor, actual: VTermColor, col: []const u8, check: []const u8) bool {
-    if (expected.type != actual.type) {
-        log.warn(@src(), "{s} colors differ in type for check {s}. Expected {}, got {}", .{
-            col,
-            check,
-            expected,
-            actual,
-        });
-        return false;
-    }
-
-    switch (expected.type) {
-        c.VTERM_COLOR_INDEXED => {
-            if (expected.indexed.idx != actual.indexed.idx) {
-                log.warn(@src(), "{s} colors differ in index for check {s}. Expected {}, got {}", .{
-                    col,
-                    check,
-                    expected,
-                    actual,
-                });
-                return false;
-            }
+/// If the color is a palette color, it looks up the color in the palette and
+/// returns it as an RGB int. If it's an RGB color, it simply calculates the
+/// RGB int. If it's a default (VTERMZ_COLOR_NONE) color, returns -1.
+pub export fn vtermz_color_rgb_int(vt: *const VTerm, color: c.VTermZColor) c_int {
+    switch (color.type) {
+        c.VTERMZ_COLOR_RGB => return (@as(c_int, @intCast(color.rgb.r)) << 16) |
+            (@as(c_int, @intCast(color.rgb.g)) << 8) |
+            @as(c_int, @intCast(color.rgb.b)),
+        c.VTERMZ_COLOR_PALETTE => {
+            const palette_color = vt.rs.colors.palette[color.palette.idx];
+            return (@as(c_int, @intCast(palette_color.r)) << 16) |
+                (@as(c_int, @intCast(palette_color.g)) << 8) |
+                @as(c_int, @intCast(palette_color.b));
         },
-        c.VTERM_COLOR_RGB => {
-            if (expected.rgb.red != actual.rgb.r or expected.rgb.green != actual.rgb.g or expected.rgb.blue != actual.rgb.b) {
-                log.warn(@src(), "{s} colors differ in color for check {s}. Expected {}, got {}", .{
-                    col,
-                    check,
-                    expected,
-                    actual,
-                });
-                return false;
-            }
-        },
-        else => return true,
+        else => return -1,
     }
-
-    return true;
 }
 
 /// Fills buf with utf8 encoded bytes from the terminal on row `row`
@@ -2332,30 +2238,28 @@ pub export fn vtermz_fill_buf_row_utf8(
                     col_idx += 1;
                     continue;
                 }
-                const start_idx = idx;
                 idx += std.unicode.utf8Encode(cell_raw.content.codepoint, buf[idx..buf_max_len]) catch return idx;
-                log.warn(
-                    @src(),
-                    "row={d}, col_idx={d}: put single grapheme: {s} ({any}) (w={})",
-                    .{ row, col_idx, buf[start_idx..idx], buf[start_idx..idx], cell_raw.gridWidth() },
-                );
+                // log.warn(
+                //     @src(),
+                //     "row={d}, col_idx={d}: put single grapheme: {s} ({any}) (w={})",
+                //     .{ row, col_idx, buf[start_idx..idx], buf[start_idx..idx], cell_raw.gridWidth() },
+                // );
             },
             .codepoint_grapheme => {
                 // TODO: handle links.
                 // TODO: keycap emojis seem to not work in a nested nvim
-                const start_idx = idx;
                 idx += std.unicode.utf8Encode(cell_raw.content.codepoint, buf[idx..buf_max_len]) catch return idx;
                 for (grapheme) |g| {
                     idx += std.unicode.utf8Encode(g, buf[idx..buf_max_len]) catch return idx;
                 }
-                log.warn(
-                    @src(),
-                    "row={d}, col_idx={d}: put multi grapheme:  {s} ({any})",
-                    .{ row, col_idx, buf[start_idx..idx], buf[start_idx..idx] },
-                );
+                // log.warn(
+                //     @src(),
+                //     "row={d}, col_idx={d}: put multi grapheme:  {s} ({any})",
+                //     .{ row, col_idx, buf[start_idx..idx], buf[start_idx..idx] },
+                // );
             },
             .bg_color_palette, .bg_color_rgb => {
-                log.warn(@src(), "row={}, col_idx={}: adding blank space", .{ row, col_idx });
+                // log.warn(@src(), "row={}, col_idx={}: adding blank space", .{ row, col_idx });
                 buf[idx] = ' ';
                 idx += 1;
             },
@@ -2364,296 +2268,53 @@ pub export fn vtermz_fill_buf_row_utf8(
         // a width of 2 cols, but the grapheme data is stored entirely in the first
         // col that the character occupies.
         const width = cell_raw.gridWidth();
-        if (width > 1) {
-            log.warn(@src(), "row={}, col_idx={}: extra width: {d}", .{ row, col_idx, width });
-        }
+        // if (width > 1) {
+        //     log.warn(@src(), "row={}, col_idx={}: extra width: {d}", .{ row, col_idx, width });
+        // }
         col_idx += width;
     }
 
     return idx;
 }
 
-pub export fn vtermz_screen_get_cell(vt: *VTerm, pos: c.VTermPos, ret: *anyopaque) callconv(.c) c_int {
-    // vtermz_refresh(vt);
-    //   ScreenCell *intcell = getcell(screen, pos.row, pos.col);
-    //   if (!intcell) {
-    //     return 0;
-    //   }
-    // Make sure to set width to 1 in case the caller asks for a cell that's beyond the rows or cols
-    // of the current render state. It's possible for the render state to have fewer
-    // rows than the VT. If the width is not set to 1, the C code will crash.
-    // const fg_c = vterm_screen_cell_get_fg(ret);
-    // const bg_c = vterm_screen_cell_get_bg(ret);
-    // const schar_c = vterm_screen_cell_get_schar(ret);
-    if (pos.row < 0 or pos.row >= vt.rs.row_data.len) {
-        vterm_screen_cell_setz(&.{}, ret);
-        return 0;
+/// Fills buf with cell styles from the terminal on row `row` from `start_col` to `end_col`.
+/// Returns number of columns filled out, which could be less than `end_col` depending on
+/// how many columns are truly in the row (as well as `buf_max_len`).
+pub export fn vtermz_fill_buf_row_style(
+    vt: *VTerm,
+    row: c_int,
+    start_col: c_int,
+    /// End col exclusive
+    end_col: c_int,
+    buf: [*]c.VTermZStyle,
+    buf_max_len: usize,
+) callconv(.c) usize {
+    if (row < 0 or start_col < 0 or row >= vt.rs.row_data.len or start_col > end_col or end_col == 0) return 0;
+
+    const cell_row = vt.rs.row_data.items(.cells)[@intCast(row)];
+    const end_col_clamped: usize = @intCast(@min(end_col, cell_row.len, buf_max_len));
+
+    const cells_raw: []ghostty_vt.Cell = cell_row.items(.raw);
+    const cells_style: []ghostty_vt.Style = cell_row.items(.style);
+
+    for (@intCast(start_col)..end_col_clamped) |col_idx| {
+        const cell_raw = cells_raw[col_idx];
+        const style: ghostty_vt.Style = if (cell_raw.style_id == 0) .{} else cells_style[col_idx];
+        buf[col_idx].fg = ghostty_color_to_termcolor(style.fg_color);
+        buf[col_idx].bg = ghostty_color_to_termcolor(style.bg_color);
+        buf[col_idx].underline_color = ghostty_color_to_termcolor(style.underline_color);
+        buf[col_idx].flags.blink = style.flags.blink;
+        buf[col_idx].flags.bold = style.flags.bold;
+        buf[col_idx].flags.faint = style.flags.faint;
+        buf[col_idx].flags.inverse = style.flags.inverse;
+        buf[col_idx].flags.invisible = style.flags.invisible;
+        buf[col_idx].flags.italic = style.flags.italic;
+        buf[col_idx].flags.overline = style.flags.overline;
+        buf[col_idx].flags.strikethrough = style.flags.strikethrough;
+        buf[col_idx].flags.underline_style = @intCast(style.flags.underline.cval());
     }
 
-    // TODO: refactor caller so we can actually make use of MultiArrayLists
-    const cell_row: ghostty_vt.RenderState.Row = vt.rs.row_data.get(@intCast(pos.row));
-
-    if (pos.col < 0 or pos.col >= cell_row.cells.len) {
-        vterm_screen_cell_setz(&.{}, ret);
-        return 0;
-    }
-
-    var vcell: VTermScreenCell = .{};
-    const cell = cell_row.cells.get(@intCast(pos.col));
-
-    const cell_style: ghostty_vt.Style = if (cell.raw.style_id != 0) cell.style else .{};
-    if (cell.raw.hyperlink) {
-        // std.debug.print("got a hyperlink!", .{});
-        // var link_buf: [512]u8 = undefined;
-        // var idx: usize = 0;
-        // for (cell.grapheme) |g| {
-        //     idx += std.unicode.utf8Encode(g, link_buf[idx..]) catch return 0;
-        // }
-        // std.debug.print("hyperlink: {s}", .{link_buf});
-    }
-
-    //   cell->schar = (intcell->schar == (uint32_t)-1) ? 0 : intcell->schar;
-    // TODO: figure out if we can handle schars more efficiently
-    switch (cell.raw.content_tag) {
-        .codepoint => {
-            const codepoint = cell.raw.content.codepoint;
-            // log.warn(@src(), "starting to process single codepoint", .{});
-            // if (len > 1) {
-            var buf: [4]u8 = undefined;
-            const len = std.unicode.utf8Encode(codepoint, &buf) catch return 0;
-            // vcell.schar = std.mem.bytesToValue(u32, &buf[0..len]);
-            vcell.schar = c.schar_from_buf(&buf, len);
-            // log.warn(@src(), "vcell grapheme u21: {s}, vcell grapheme: {s}, width: {}", .{ bytes_hex_leak(vt, buf[0..len]), buf[0..len], cell.raw.gridWidth() });
-            // } else {
-            //     @branchHint(.likely);
-            //     vcell.schar = codepoint;
-            //     if (codepoint == 0x00) {
-            //         log.warn(@src(), "got null codepoint. skipping.", .{});
-            //     } else {
-            //         log.warn(@src(), "vcell single grapheme: {c}, width: {}", .{ @as(u8, @intCast(codepoint)), cell.raw.gridWidth() });
-            //     }
-            // }
-            // log.warn(@src(), "finished processing single codepoint", .{});
-        },
-        .codepoint_grapheme => {
-            // TODO: handle links.
-            // TODO: ZWJ emojis seem to not work in a nested nvim
-            var buf: [c.MAX_SCHAR_SIZE]u8 = undefined;
-            var idx: usize = 0;
-            // log.warn(@src(), "starting to process grapheme cluster of len {d}", .{cell.grapheme.len});
-            // cell.raw.content.codepoint is the first codepoint in the cluster. The
-            // remainder are stored in cell.grapheme.
-            idx += std.unicode.utf8Encode(cell.raw.content.codepoint, &buf) catch return 0;
-            for (cell.grapheme) |g| {
-                // log.warn(@src(), "processing grapheme: {d}", .{g});
-                // if (g == 8205) log.warn(@src(), "got ZWJ in graheme cluster.", .{});
-                idx += std.unicode.utf8Encode(g, buf[idx..]) catch return 0;
-            }
-            // log.warn(@src(), "vcell grapheme raw: {s}, vcell grapheme: {s}, width: {}", .{ bytes_hex_leak(vt, buf[0..idx]), buf[0..idx], cell.raw.gridWidth() });
-            // log.warn(@src(), "finished processing grapheme cluster", .{});
-            vcell.schar = c.schar_from_buf(&buf, idx);
-        },
-        .bg_color_palette => {
-            const idx = cell.raw.content.color_palette;
-            vcell.bg = .{
-                .indexed = .{
-                    .type = c.VTERM_COLOR_INDEXED,
-                    .idx = idx,
-                },
-            };
-            // _ = check_colors_match(bg_c, vcell.bg, "bg", "bg_color_palette");
-            // if (bg_c.type != c.VTERM_COLOR_INDEXED) {
-            //     log.warn(@src(), "bg_c type: expected {} (indexed), got {}", .{ c.VTERM_COLOR_INDEXED, bg_c.type });
-            // } else if (bg_c.indexed.idx != idx) {
-            //     log.warn(@src(), "bg_c type: expected idx {}, got {}", .{ bg_c.indexed.idx, idx });
-            // }
-            // std.debug.print("checking bg_palette color", .{});
-            // std.debug.assert(bg_c.type == c.VTERM_COLOR_INDEXED);
-            // std.debug.assert(bg_c.indexed.idx == idx);
-            vterm_screen_cell_setz(&vcell, ret);
-            return 1;
-        },
-        .bg_color_rgb => {
-            const col = cell.raw.content.color_rgb;
-            vcell.bg = .{
-                .rgb = .{
-                    .type = c.VTERM_COLOR_RGB,
-                    .r = col.r,
-                    .g = col.g,
-                    .b = col.b,
-                },
-            };
-            // _ = check_colors_match(bg_c, vcell.bg, "bg", "bg_color_rgb");
-            // if (bg_c.type != c.VTERM_COLOR_RGB) {
-            //     log.warn(@src(), "bg_c type: expected {} (RGB), got {}", .{ c.VTERM_COLOR_RGB, bg_c.type });
-            // }
-            // if (bg_c.rgb.red != vcell.bg.rgb.r) {
-            //     log.warn(@src(), "bg_c r doesn't match: expected {}, got {}", .{ bg_c.rgb.red, vcell.bg.rgb.r });
-            // }
-            // if (bg_c.rgb.green != vcell.bg.rgb.g) {
-            //     log.warn(@src(), "bg_c g doesn't match: expected {}, got {}", .{ bg_c.rgb.green, vcell.bg.rgb.g });
-            // }
-            // if (bg_c.rgb.blue != vcell.bg.rgb.b) {
-            //     log.warn(@src(), "bg_c b doesn't match: expected {}, got {}", .{ bg_c.rgb.blue, vcell.bg.rgb.b });
-            // }
-            // std.debug.print("checking bg_rgb color", .{});
-            // std.debug.assert(bg_c.type == c.VTERM_COLOR_RGB);
-            // std.debug.assert(bg_c.rgb.red == col.r);
-            // std.debug.assert(bg_c.rgb.green == col.g);
-            // std.debug.assert(bg_c.rgb.blue == col.b);
-            vterm_screen_cell_setz(&vcell, ret);
-            return 1;
-        },
-    }
-
-    //   cell->attrs.bold = intcell->pen.bold;
-    vcell.attrs.bold = cell_style.flags.bold;
-    //   cell->attrs.underline = intcell->pen.underline;
-    // underlines: enum {
-    //     VTERM_UNDERLINE_OFF,
-    //     VTERM_UNDERLINE_SINGLE,
-    //     VTERM_UNDERLINE_DOUBLE,
-    //     VTERM_UNDERLINE_CURLY,
-    // }
-    const underline = cell_style.flags.underline.cval();
-    if (underline < 4) {
-        vcell.attrs.underline = @intCast(underline);
-    }
-    //   cell->attrs.italic = intcell->pen.italic;
-    vcell.attrs.italic = cell_style.flags.italic;
-    //   cell->attrs.blink = intcell->pen.blink;
-    vcell.attrs.blink = cell_style.flags.blink;
-    //   TODO: make sure this is okay
-    //   cell->attrs.reverse = intcell->pen.reverse ^ screen->global_reverse;
-    vcell.attrs.reverse = cell_style.flags.inverse;
-    // TODO: make sure this is right
-    //   cell->attrs.conceal = intcell->pen.conceal;
-    vcell.attrs.conceal = cell_style.flags.faint;
-    //   cell->attrs.strike = intcell->pen.strike;
-    vcell.attrs.strike = cell_style.flags.strikethrough;
-    //   TODO: no idea what the deal is with font. Are multiple fonts actually supported?
-    //   cell->attrs.font = intcell->pen.font;
-    //   TODO: no idea what the deal is with small
-    //   cell->attrs.small = intcell->pen.small;
-    //   TODO: no idea what the deal is with baseline
-    //   cell->attrs.baseline = intcell->pen.baseline;
-    //   TODO: not sure what these double width things are
-    //   cell->attrs.dwl = intcell->pen.dwl;
-    //   cell->attrs.dhl = intcell->pen.dhl;
-    vcell.attrs.dwl = false;
-    vcell.attrs.dhl = 0;
-
-    vcell.width = cell.raw.gridWidth();
-
-    //   cell->fg = intcell->pen.fg;
-    //   cell->bg = intcell->pen.bg;
-    vcell.fg, vcell.bg = vcell_fg_bg_from_cell(cell);
-    // if (!check_colors_match(fg_c, fg, "fg", "fg from cell")) {
-    //   log.warn(@src(), "fg color doesn't match for schar: {c}", .{@as(u8, @intCast(vcell.schar))});
-    // }
-    // if (!check_colors_match(bg_c, bg, "bg", "bg from cell")) {
-    //   log.warn(@src(), "bg color doesn't match for schar: {c}", .{@as(u8, @intCast(vcell.schar))});
-    // }
-    // std.debug.print("checking fg type", .{});
-    // std.debug.assert(fg_c.type == fg.type);
-    // std.debug.print("checking fg value", .{});
-    // switch (fg.type) {
-    //     c.VTERM_COLOR_INDEXED => std.debug.assert(fg.indexed.idx == fg_c.indexed.idx),
-    //     c.VTERM_COLOR_RGB => {
-    //         std.debug.assert(fg.rgb.r == fg_c.rgb.red);
-    //         std.debug.assert(fg.rgb.g == fg_c.rgb.green);
-    //         std.debug.assert(fg.rgb.b == fg_c.rgb.blue);
-    //     },
-    //     else => {},
-    // }
-    // std.debug.print("checking bg type", .{});
-    // std.debug.assert(bg_c.type == bg.type);
-    // std.debug.print("checking bg value", .{});
-    // switch (bg.type) {
-    //     c.VTERM_COLOR_INDEXED => std.debug.assert(bg.indexed.idx == bg_c.indexed.idx),
-    //     c.VTERM_COLOR_RGB => {
-    //         std.debug.assert(bg.rgb.r == bg_c.rgb.red);
-    //         std.debug.assert(bg.rgb.g == bg_c.rgb.green);
-    //         std.debug.assert(bg.rgb.b == bg_c.rgb.blue);
-    //     },
-    //     else => {},
-    // }
-    // if (pos.row == 4 and (pos.col == 4 or pos.col == 0)) {
-    //     log.warn(@src(), "col: {}, schar_c: {}, style id: {}", .{ pos.col, schar_c, cell.raw.style_id });
-    //     if (cell.raw.style_id != 0) {
-    //         log.warn(@src(), "non default style", .{});
-    //     }
-    // }
-    // if (fg_c.type != fg.type) {
-    //     log.warn(@src(), "fg type mismatch. Expected: {}, got: {}. schar_c: {}, style_id: {}", .{ fg_c.type, fg.type, schar_c, cell.raw.style_id });
-    //     if (cell.raw.style_id != 0) {
-    //         var colbuf: [256]u8 = undefined;
-    //         var colbufw = std.Io.Writer.fixed(&colbuf);
-    //         cell.style.fg_color.format("{}", .{}, &colbufw) catch {};
-    //         log.warn(@src(), "fg_c: {}, {}, {}. cell style: {s}", .{ fg_c.rgb.red, fg_c.rgb.green, fg_c.rgb.blue, colbufw.buffered() });
-    //     }
-    // }
-    // if (bg_c.type != bg.type) {
-    //     log.warn(@src(), "bg type mismatch. Expected: {}, got: {}. schar_c: {}, schar: {}", .{ bg_c.type, bg.type, schar_c, vcell.schar });
-    //     // var colbuf: [256]u8 = undefined;
-    //     // var colbufw = std.Io.Writer.fixed(&colbuf);
-    //     // cell.style.bg_color.format("{}", .{}, &colbufw) catch {};
-    //     // if (schar_c == 0) {
-    //     //     log.warn(@src(), "bg_c: {}, {}, {}. cell style: {s}", .{ bg_c.rgb.red, bg_c.rgb.green, bg_c.rgb.blue, colbufw.buffered() });
-    //     // }
-    // }
-
-    // if (vcell.schar == ' ') {
-    //   std.debug.print("vcellfg: {}, vcellbg: {}", .{vcell.fg, vcell.bg});
-    // }
-
-    // const raw_value: u32 = std.math.maxInt(u32);
-    // vcell.attrs = @bitCast(raw_value);
-
-    // TODO: figure out what the deal is with this.
-    //   cell->uri = intcell->pen.uri;
-    //
-    // vcell.width = 1;
-    // TODO: figure out what the deal is with this.
-    //   if (pos.col < (screen->cols - 1)
-    //       && getcell(screen, pos.row, pos.col + 1)->schar == (uint32_t)-1) {
-    //     cell->width = 2;
-    //   } else {
-    //     cell->width = 1;
-    //   }
-    // if (pos.col < vt.t.cols - 1) {
-    //     const adj = cell_row.cells.get(@intCast(pos.col + 1));
-    //     _ = adj;
-    //     // if (adj.raw.content_tag == .codepoint and adj.raw.content.codepoint == '\\') {
-    //     //     vcell.width = 2;
-    //     // }
-    // }
-    // TODO: figure out why cells with spaces don't have the same colors as libvterm.
-    // This typically sets them to have the default fg/bg, whereas libvterm seems to use rgb
-    // colors.
-    // if (vcell.schar == 0 and (vcell.fg.type != c.VTERM_COLOR_DEFAULT_FG or vcell.bg.type != c.VTERM_COLOR_DEFAULT_BG)) {
-    //     @panic("empty schar has wrong colors");
-    //     // std.debug.print("empty schar has wrong colors. fg type: {}, bg type: {}", .{vcell.fg.type, vcell.bg.type});
-    // }
-    // if (vcell.schar == '~') {
-    //     const adj = cell_row.cells.get(@intCast(pos.col + 10));
-    //     // std.debug.print("adjacent style ID: {}", .{adj.raw.style_id});
-    //     const adj_fg, const adj_bg = vcell_fg_bg_from_cell(vt, adj);
-    //     std.debug.print("adj fg type: {}, adj_bg type: {}\n", .{ adj_fg.type, adj_bg.type });
-    //     if (adj.raw.content_tag == .codepoint) {
-    //         std.debug.print("adj codepoint: {}\n", .{adj.raw.content.codepoint});
-    //     }
-    //     if (adj_fg.type & 1 > 0) {
-    //         std.debug.print("adj fg ind: {}\n", .{adj_fg.indexed.idx});
-    //     }
-    //     if (adj_bg.type & 1 > 0) {
-    //         std.debug.print("adj bg ind: {}\n", .{adj_bg.indexed.idx});
-    //     }
-    // }
-
-    vterm_screen_cell_setz(&vcell, ret);
-
-    return 1;
+    return end_col_clamped;
 }
 
 pub export fn vtermz_update(vt: *VTerm) callconv(.c) void {
@@ -2694,7 +2355,7 @@ pub export fn vtermz_set_utf8(vt: *VTerm, is_utf8: bool) callconv(.c) void {
 }
 
 // DONE
-pub export fn vtermz_state_set_palette_color(vt: *VTerm, index: c_int, col: *const VTermColor) callconv(.c) void {
+pub export fn vtermz_state_set_palette_color(vt: *VTerm, index: c_int, col: *const c.VTermZColor) callconv(.c) void {
     if (index >= 0 and index < 16) vt.t.colors.palette.set(@intCast(index), .{
         .r = col.rgb.r,
         .g = col.rgb.g,

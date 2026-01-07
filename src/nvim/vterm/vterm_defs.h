@@ -334,6 +334,60 @@ typedef struct {
 //////////////////////////
 typedef struct VTermZ VTermZ;
 
+#define VTERMZ_COLOR_NONE 0
+#define VTERMZ_COLOR_RGB 1
+#define VTERMZ_COLOR_PALETTE 2
+
+#define VTERMZ_COLOR_IS_DEFAULT(col) \
+  (col.type == VTERMZ_COLOR_NONE)
+
+#define VTERMZ_COLOR_IS_RGB(col) \
+  (col.type == VTERMZ_COLOR_RGB)
+
+#define VTERMZ_COLOR_IS_PALETTE(col) \
+  (col.type == VTERMZ_COLOR_PALETTE)
+
+typedef enum {
+    VTERMZ_UNDERLINE_NONE = 0,
+    VTERMZ_UNDERLINE_SINGLE = 1,
+    VTERMZ_UNDERLINE_DOUBLE = 2,
+    VTERMZ_UNDERLINE_CURLY = 3,
+    VTERMZ_UNDERLINE_DOTTED = 4,
+    VTERMZ_UNDERLINE_DASHED = 5,
+} VTermZUnderlineStyle;
+
+typedef union {
+  uint8_t type;
+  struct {
+    uint8_t type;
+  } none;
+  struct {
+    uint8_t type;
+    uint8_t r;
+    uint8_t g;
+    uint8_t b;
+  } rgb;
+  struct {
+    uint8_t type;
+    uint8_t idx;
+  } palette;
+} VTermZColor;
+
+typedef struct {
+  VTermZColor fg, bg, underline_color;
+  struct {
+      bool bold;
+      bool italic;
+      bool faint;
+      bool blink;
+      bool inverse;
+      bool invisible;
+      bool strikethrough;
+      bool overline;
+      uint8_t underline_style;
+  } flags;
+} VTermZStyle;
+
 typedef enum {
   VTERMZ_TERMINATOR_BEL,  // \x07
   VTERMZ_TERMINATOR_ST,  // \x1b\x5c
@@ -351,7 +405,7 @@ typedef struct {
   // int (*damage)(VTermRect rect, void *user);
   // int (*moverect)(VTermRect dest, VTermRect src, void *user);
   int (*movecursor)(int row, int col, void *user);
-  int (*settermprop)(VTermProp prop, VTermValue *val, void *user);
+  // int (*settermprop)(VTermProp prop, VTermValue *val, void *user);
   int (*bell)(void *user);
   int (*theme)(bool *dark, void *user);
   int (*osc_color)(VTermZOscColor osc, void *user);
@@ -363,6 +417,7 @@ typedef struct {
 } VTermZCallbacks;
 
 VTermZ *vtermz_new(int rows, int cols);
+void vtermz_screen_set_callbacks(VTermZ *vt, VTermZCallbacks *callbacks, void *user);
 void vtermz_free(VTermZ *vt);
 void vtermz_print(VTermZ *vt);
 size_t vtermz_input_write(VTermZ *vt, const char *bytes, size_t len);
@@ -376,44 +431,6 @@ void vtermz_teardown(void);
 int vtermz_screen_get_cell(const VTermZ *screen, VTermPos pos, void *cell);
 void vtermz_refresh(VTermZ *vt);
 void vtermz_keyboard_unichar(VTermZ *vt, uint32_t c, VTermModifier mod);
-
-typedef struct {
-  bool bold;
-  uint8_t underline;
-  bool italic;
-  bool blink;
-  bool reverse;
-  bool conceal;
-  bool strike;
-  uint8_t font;
-  bool dwl;
-  uint8_t dhl;
-  bool small;
-  uint8_t baseline;
-} VTermScreenCellAttrsZ;
-
-
-// pub const VTermScreenCell = extern struct {
-//     schar: u32 = 0,
-//     width: u8 = 0,
-//     attrs: VTermScreenCellAttrs = .{},
-//     fg: VTermColor = .{ .type = 0 },
-//     bg: VTermColor = .{ .type = 0 },
-//     uri: c_int = 0,
-// };
-typedef struct {
-  schar_T schar;
-  char width;
-  VTermScreenCellAttrsZ attrs;
-  VTermColor fg, bg;
-  int uri;
-} VTermScreenCellZ;
-void vterm_screen_cell_setz(const VTermScreenCellZ *srcz, VTermScreenCell *dstc);
-void vtermz_screen_set_callbacks(VTermZ *vt, VTermZCallbacks *callbacks, void *user);
-void vterm_screen_cell_set_width(VTermScreenCell *cell, char width);
-VTermColor vterm_screen_cell_get_fg(const VTermScreenCell *cell);
-VTermColor vterm_screen_cell_get_bg(const VTermScreenCell *cell);
-schar_T vterm_screen_cell_get_schar(const VTermScreenCell *cell);
 size_t vtermz_fill_buf_row_utf8(
     const VTermZ *vt,
     int row,
@@ -422,3 +439,12 @@ size_t vtermz_fill_buf_row_utf8(
     char *buf,
     size_t buf_max_len
 );
+size_t vtermz_fill_buf_row_style(
+    const VTermZ *vt,
+    int row,
+    int start_col,
+    int end_col,
+    VTermZStyle *buf,
+    size_t buf_max_len
+);
+int vtermz_color_rgb_int(const VTermZ *vt, VTermZColor color);

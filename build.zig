@@ -47,6 +47,7 @@ pub fn build(b: *std.Build) !void {
     const optimize_host = if (cross_compiling) .ReleaseSafe else optimize;
 
     const use_unibilium = b.option(bool, "unibilium", "use unibilium") orelse true;
+    const use_ghostty = b.option(bool, "ghostty", "use ghostty for vterm implementation") orelse false;
 
     // puc lua 5.1 is not ReleaseSafe "safe"
     const optimize_lua = if (optimize == .Debug or optimize == .ReleaseSafe) .ReleaseSmall else optimize;
@@ -383,6 +384,7 @@ pub fn build(b: *std.Build) !void {
         if (is_windows) "-DWIN32_LEAN_AND_MEAN" else "",
         if (is_windows) "-DUTF8PROC_STATIC" else "",
         if (use_unibilium) "-DHAVE_UNIBILIUM" else "",
+        if (use_ghostty) "-DVTERM_GHOSTTY" else "",
     };
     nvim_exe.addCSourceFiles(.{ .files = src_paths, .flags = &flags });
 
