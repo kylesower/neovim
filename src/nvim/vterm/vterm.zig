@@ -2583,9 +2583,9 @@ test "scrollback" {
         _ = vtermz_input_write(vt, row.ptr, row.len);
     }
 
-    for (0..rows.len - vt.rs.rows) |scroll_amount| {
+    for (0..rows.len - vt.t.rows) |scroll_amount| {
         vtermz_refresh(vt);
-        for (rows[rows.len - vt.rs.rows - scroll_amount .. rows.len - scroll_amount], 0..) |row, idx| {
+        for (rows[rows.len - vt.t.rows - scroll_amount .. rows.len - scroll_amount], 0..) |row, idx| {
             _ = vtermz_fill_buf_row_utf8(vt, @intCast(idx), 0, 20, &out_buf, out_buf.len);
             try std.testing.expectEqualSlices(u8, row, out_buf[0..row.len]);
         }
