@@ -416,35 +416,45 @@ typedef struct {
   // int (*sb_clear)(void *user);
 } VTermZCallbacks;
 
-VTermZ *vtermz_new(int rows, int cols);
+VTermZ *vtermz_new(uint16_t rows, uint16_t cols);
 void vtermz_screen_set_callbacks(VTermZ *vt, VTermZCallbacks *callbacks, void *user);
 void vtermz_free(VTermZ *vt);
 void vtermz_print(VTermZ *vt);
 size_t vtermz_input_write(VTermZ *vt, const char *bytes, size_t len);
 void vtermz_set_utf8(VTermZ *vt, bool is_utf8);
-void vtermz_get_size(const VTermZ *vt, int *rowsp, int *colsp);
-void vtermz_set_size(VTermZ *vt, int rows, int cols);
-void vtermz_state_set_palette_color(VTermZ *vt, int index, const VTermColor *col);
+void vtermz_get_size(const VTermZ *vt, uint16_t *rowsp, uint16_t *colsp);
+void vtermz_set_size(VTermZ *vt, uint16_t rows, uint16_t cols);
+void vtermz_state_set_palette_color(VTermZ *vt, uint8_t index, const VTermColor *col);
 void vtermz_output_set_callback(VTermZ *vt, VTermOutputCallback *func, void *user);
 void vtermz_keyboard_key(VTermZ *vtz, VTermKey key, VTermModifier mod);
 void vtermz_teardown(void);
-int vtermz_screen_get_cell(const VTermZ *screen, VTermPos pos, void *cell);
 void vtermz_refresh(VTermZ *vt);
 void vtermz_keyboard_unichar(VTermZ *vt, uint32_t c, VTermModifier mod);
 size_t vtermz_fill_buf_row_utf8(
     const VTermZ *vt,
-    int row,
-    int start_col,
-    int end_col,
+    size_t row,
+    size_t start_col,
+    size_t end_col,
     char *buf,
     size_t buf_max_len
 );
 size_t vtermz_fill_buf_row_style(
     const VTermZ *vt,
-    int row,
-    int start_col,
-    int end_col,
+    size_t row,
+    size_t start_col,
+    size_t end_col,
+    VTermZStyle *buf,
+    size_t buf_max_len
+);
+size_t vtermz_fill_buf_lnum_style(
+    const VTermZ *vt,
+    size_t lnum,
+    size_t start_col,
+    size_t end_col,
     VTermZStyle *buf,
     size_t buf_max_len
 );
 int vtermz_color_rgb_int(const VTermZ *vt, VTermZColor color);
+size_t vtermz_scroll_linenr(VTermZ *vt, size_t top_linenr);
+size_t vtermz_scroll_bottom(VTermZ *vt);
+size_t vtermz_top_linenr(VTermZ *vt);

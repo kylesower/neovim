@@ -1764,7 +1764,7 @@ else
     gpa.allocator();
 
 // DONE
-pub export fn vtermz_new(rows: c_int, cols: c_int) callconv(.c) *VTerm {
+pub export fn vtermz_new(rows: u16, cols: u16) callconv(.c) *VTerm {
     const alloc = gpa_alloc;
 
     const t = alloc.create(ghostty_vt.Terminal) catch preserve_exit(e_outofmem);
@@ -1850,153 +1850,6 @@ pub export fn vtermz_screen_set_callbacks(vt: *VTerm, callbacks: *const vterm_ha
     vt.s.handler.callbacks = callbacks.*;
     vt.s.handler.cbdata = user;
 }
-
-// void vterm_push_output_bytes(VTerm *vt, const char *bytes, size_t len)
-// {
-//   if (vt->outfunc) {
-//     (vt->outfunc)(bytes, len, vt->outdata);
-//     return;
-//   }
-//
-//   if (len > vt->outbuffer_len - vt->outbuffer_cur) {
-//     return;
-//   }
-//
-//   memcpy(vt->outbuffer + vt->outbuffer_cur, bytes, len);
-//   vt->outbuffer_cur += len;
-// }
-// pub fn vtermz_push_output_bytes(vt: *VTerm, bytes: []const u8, len: usize) void {
-//     //   if (vt->outfunc) {
-//     //     (vt->outfunc)(bytes, len, vt->outdata);
-//     //     return;
-//     //   }
-//     if (vt.outfunc) |outfunc| {
-//         outfunc(bytes.ptr, len, vt.outdata);
-//         return;
-//     }
-//
-//     //   if (len > vt->outbuffer_len - vt->outbuffer_cur) {
-//     //     return;
-//     //   }
-//     if (len > vt.keyoutbuffer.len - vt.outbuffer_cur) {
-//         return;
-//     }
-//     // memcpy(vt->outbuffer + vt->outbuffer_cur, bytes, len);
-//     @memcpy(vt.keyoutbuffer[vt.outbuffer_cur .. vt.outbuffer_cur + len], bytes[0..len]);
-//     //   vt->outbuffer_cur += len;
-//     vt.outbuffer_cur += len;
-// }
-
-// void vterm_push_output_sprintf(VTerm *vt, const char *format, ...)
-//   FUNC_ATTR_PRINTF(2, 3)
-// {
-//   va_list args;
-//   va_start(args, format);
-//   size_t len = (size_t)vsnprintf(vt->tmpbuffer, vt->tmpbuffer_len, format, args);
-//   vterm_push_output_bytes(vt, vt->tmpbuffer, len);
-//   va_end(args);
-// }
-// pub fn vtermz_push_output_sprintf(vt: *VTerm, comptime format: []const u8, args: anytype) void {
-//     // TODO: handle failure, but this should probably never fail.
-//     const buf = std.fmt.bufPrint(&vt.tmpbuffer, format, args) catch return;
-//     vtermz_push_output_bytes(vt, buf, buf.len);
-// }
-
-// void vterm_push_output_sprintf_ctrl(VTerm *vt, uint8_t ctrl, const char *fmt, ...)
-//   FUNC_ATTR_PRINTF(3, 4)
-// {
-//   size_t cur;
-//
-//   if (ctrl >= 0x80 && !vt->mode.ctrl8bit) {
-//     cur = (size_t)snprintf(vt->tmpbuffer, vt->tmpbuffer_len, ESC_S "%c", ctrl - 0x40);
-//   } else {
-//     cur = (size_t)snprintf(vt->tmpbuffer, vt->tmpbuffer_len, "%c", ctrl);
-//   }
-//
-//   if (cur >= vt->tmpbuffer_len) {
-//     return;
-//   }
-//
-//   va_list args;
-//   va_start(args, fmt);
-//   cur += (size_t)vsnprintf(vt->tmpbuffer + cur, vt->tmpbuffer_len - cur, fmt, args);
-//   va_end(args);
-//
-//   if (cur >= vt->tmpbuffer_len) {
-//     return;
-//   }
-//
-//   vterm_push_output_bytes(vt, vt->tmpbuffer, cur);
-// }
-// fn vterm_push_output_sprintf_ctrl(vt: *VTerm, ctrl: u8, fmt: []const u8, args: anytype) void {
-//     //   size_t cur;
-//     //
-//     //   if (ctrl >= 0x80 && !vt->mode.ctrl8bit) {
-//     //     cur = (size_t)snprintf(vt->tmpbuffer, vt->tmpbuffer_len, ESC_S "%c", ctrl - 0x40);
-//     //   } else {
-//     //     cur = (size_t)snprintf(vt->tmpbuffer, vt->tmpbuffer_len, "%c", ctrl);
-//     //   }
-//     //
-//     //   if (cur >= vt->tmpbuffer_len) {
-//     //     return;
-//     //   }
-//     // vt.t.modes.get()
-//     // if (ctrl >= 0x80 and !vt.t.)
-//     //
-//     //   va_list args;
-//     //   va_start(args, fmt);
-//     //   cur += (size_t)vsnprintf(vt->tmpbuffer + cur, vt->tmpbuffer_len - cur, fmt, args);
-//     //   va_end(args);
-//     //
-//     //   if (cur >= vt->tmpbuffer_len) {
-//     //     return;
-//     //   }
-//     //
-//     //   vterm_push_output_bytes(vt, vt->tmpbuffer, cur);
-//     // var s = vt.t.vtStream();
-//     var s = try ghostty_vt.Stream(u8).initAlloc(vt.allocator7);
-//     // vt.t.vtHandler()
-//     s.next();
-// }
-
-//
-// void vterm_push_output_sprintf_str(VTerm *vt, uint8_t ctrl, bool term, const char *fmt, ...)
-//   FUNC_ATTR_PRINTF(4, 5)
-// {
-//   size_t cur = 0;
-//
-//   if (ctrl) {
-//     if (ctrl >= 0x80 && !vt->mode.ctrl8bit) {
-//       cur = (size_t)snprintf(vt->tmpbuffer, vt->tmpbuffer_len, ESC_S "%c", ctrl - 0x40);
-//     } else {
-//       cur = (size_t)snprintf(vt->tmpbuffer, vt->tmpbuffer_len, "%c", ctrl);
-//     }
-//
-//     if (cur >= vt->tmpbuffer_len) {
-//       return;
-//     }
-//   }
-//
-//   va_list args;
-//   va_start(args, fmt);
-//   cur += (size_t)vsnprintf(vt->tmpbuffer + cur, vt->tmpbuffer_len - cur, fmt, args);
-//   va_end(args);
-//
-//   if (cur >= vt->tmpbuffer_len) {
-//     return;
-//   }
-//
-//   if (term) {
-//     cur += (size_t)snprintf(vt->tmpbuffer + cur, vt->tmpbuffer_len - cur,
-//                             vt->mode.ctrl8bit ? "\x9C" : ESC_S "\\");  // ST
-//
-//     if (cur >= vt->tmpbuffer_len) {
-//       return;
-//     }
-//   }
-//
-//   vterm_push_output_bytes(vt, vt->tmpbuffer, cur);
-// }
 
 // TODO: make this a static lookup or rework terminal.c so it can make use of
 // ghostty keys directly
@@ -2209,16 +2062,21 @@ pub export fn vtermz_color_rgb_int(vt: *const VTerm, color: c.VTermZColor) c_int
 /// Returns number of bytes written.
 pub export fn vtermz_fill_buf_row_utf8(
     vt: *VTerm,
-    row: c_int,
-    start_col: c_int,
+    row: usize,
+    start_col: usize,
     /// End col exclusive
-    end_col: c_int,
+    end_col: usize,
     buf: [*]u8,
     buf_max_len: usize,
 ) callconv(.c) usize {
     var idx: usize = 0;
 
-    if (row < 0 or start_col < 0 or row >= vt.rs.row_data.len or start_col > end_col or end_col == 0) return idx;
+    if (row >= vt.rs.row_data.len or start_col > end_col or end_col == 0) return idx;
+    // log.warn(@src(), "filling buf row utf8 for row: {}", .{row});
+    // vt.t.screens.active.pages.total_rows;
+    // vt.t.screens.active.scroll(.{ .row = 7 });
+    const sb = vt.t.screens.active.pages.scrollbar();
+    log.warn(@src(), "fetching row {} with sb {any}", .{row, sb});
 
     const cell_row = vt.rs.row_data.items(.cells)[@intCast(row)];
     const end_col_clamped = @min(end_col, cell_row.len);
@@ -2274,6 +2132,10 @@ pub export fn vtermz_fill_buf_row_utf8(
         col_idx += width;
     }
 
+    if (row == 0) {
+      log.warn(@src(), "got row: {s}", .{buf[0..idx]});
+    }
+
     return idx;
 }
 
@@ -2282,14 +2144,14 @@ pub export fn vtermz_fill_buf_row_utf8(
 /// how many columns are truly in the row (as well as `buf_max_len`).
 pub export fn vtermz_fill_buf_row_style(
     vt: *VTerm,
-    row: c_int,
-    start_col: c_int,
+    row: usize,
+    start_col: usize,
     /// End col exclusive
-    end_col: c_int,
+    end_col: usize,
     buf: [*]c.VTermZStyle,
     buf_max_len: usize,
 ) callconv(.c) usize {
-    if (row < 0 or start_col < 0 or row >= vt.rs.row_data.len or start_col > end_col or end_col == 0) return 0;
+    if (row >= vt.rs.row_data.len or start_col > end_col or end_col == 0) return 0;
 
     const cell_row = vt.rs.row_data.items(.cells)[@intCast(row)];
     const end_col_clamped: usize = @intCast(@min(end_col, cell_row.len, buf_max_len));
@@ -2317,22 +2179,61 @@ pub export fn vtermz_fill_buf_row_style(
     return end_col_clamped;
 }
 
+/// Fills buf with cell styles from the terminal on line number `lnum` from `start_col` to `end_col`.
+/// Returns number of columns filled out, which could be less than `end_col` depending on
+/// how many columns are truly in the row (as well as `buf_max_len`).
+pub export fn vtermz_fill_buf_lnum_style(
+    vt: *VTerm,
+    lnum: usize,
+    start_col: usize,
+    /// End col exclusive
+    end_col: usize,
+    buf: [*]c.VTermZStyle,
+    buf_max_len: usize,
+) callconv(.c) usize {
+    if (lnum >= vt.t.screens.active.pages.total_rows or start_col > end_col or end_col == 0) {
+        // log.warn(@src(), "lnum {} out of range. total rows: {}, start_col: {}, end_col: {}", .{lnum, vt.t.screens.active.pages.total_rows, start_col, end_col});
+        return 0;
+    }
+    // log.warn(@src(), "getting lnum style for lnum={}", .{lnum});
+    // TODO: I'm not sure how to avoid this if the caller needs to request arbitrary
+    // line numbers. Getting the scrollbar every time is potentially expensive.
+    const sb = vt.t.screens.active.pages.scrollbar();
+    const to_scroll = @as(isize, @intCast(lnum)) - @as(isize, @intCast(sb.offset));
+    // log.warn(@src(), "sb: {any}, to_scroll={}", .{sb, to_scroll});
+    return if (to_scroll >= 0 and to_scroll < sb.len) blk: {
+        // row is already in viewport
+        // log.warn(@src(), "lnum exists at row {}, no scroll necessary", .{to_scroll});
+        break :blk vtermz_fill_buf_row_style(vt, @intCast(to_scroll), start_col, end_col, buf, buf_max_len);
+    } else blk: {
+        // TODO: I'm not sure how to avoid this if the caller needs to request arbitrary
+        // line numbers. This is terrible.
+        // log.warn(@src(), "scrolling {}", .{to_scroll});
+        vt.t.scrollViewport(.{ .delta = to_scroll }) catch {};
+        vtermz_refresh(vt);
+        const res = vtermz_fill_buf_row_style(vt, 0, start_col, end_col, buf, buf_max_len);
+        vt.t.scrollViewport(.{ .delta = -to_scroll }) catch {};
+        vtermz_refresh(vt);
+        break :blk res;
+    };
+}
+
 pub export fn vtermz_update(vt: *VTerm) callconv(.c) void {
     vt.rs.update(vt.allocator, vt.t) catch preserve_exit(e_outofmem);
 }
 
-pub export fn vtermz_get_size(vt: *const VTerm, rowsp: ?*c_int, colsp: ?*c_int) callconv(.c) void {
+pub export fn vtermz_get_size(vt: *const VTerm, rowsp: ?*u16, colsp: ?*u16) callconv(.c) void {
     // TODO: should this be the vt.rs size or vt.t size?
     if (rowsp) |row| {
-        row.* = vt.rs.rows;
+        row.* = vt.t.rows;
     }
     if (colsp) |col| {
-        col.* = vt.rs.cols;
+        col.* = vt.t.cols;
     }
 }
 
-pub export fn vtermz_set_size(vt: *VTerm, rows: c_int, cols: c_int) callconv(.c) void {
-    if (rows < 1 or cols < 1) {
+pub export fn vtermz_set_size(vt: *VTerm, rows: u16, cols: u16) callconv(.c) void {
+    if (rows == 0 or cols == 0) {
         return;
     }
 
@@ -2355,12 +2256,29 @@ pub export fn vtermz_set_utf8(vt: *VTerm, is_utf8: bool) callconv(.c) void {
 }
 
 // DONE
-pub export fn vtermz_state_set_palette_color(vt: *VTerm, index: c_int, col: *const c.VTermZColor) callconv(.c) void {
-    if (index >= 0 and index < 16) vt.t.colors.palette.set(@intCast(index), .{
+pub export fn vtermz_state_set_palette_color(vt: *VTerm, index: u8, col: *const c.VTermZColor) callconv(.c) void {
+    if (index >= 0 and index < 16) vt.t.colors.palette.set(index, .{
         .r = col.rgb.r,
         .g = col.rgb.g,
         .b = col.rgb.b,
     });
+}
+
+pub export fn vtermz_scroll_linenr(vt: *VTerm, top_linenr: usize) callconv(.c) usize {
+    const top = @min(top_linenr, vt.t.screens.active.pages.total_rows - vt.t.rows);
+    vt.t.screens.active.scroll(.{ .row = top });
+    vtermz_refresh(vt);
+    return top;
+}
+
+pub export fn vtermz_scroll_bottom(vt: *VTerm) callconv(.c) usize {
+    vt.t.scrollViewport(.bottom) catch {};
+    vtermz_refresh(vt);
+    return vt.t.screens.active.pages.total_rows - vt.t.rows;
+}
+
+pub export fn vtermz_top_linenr(vt: *VTerm) callconv(.c) usize {
+    return vt.t.screens.active.pages.total_rows - vt.t.rows;
 }
 
 // // 263:        VTERM_TERMINATOR_BEL ? STATIC_CSTR_AS_OBJ("\x07") : STATIC_CSTR_AS_OBJ("\x1b\\"));
@@ -2578,8 +2496,10 @@ test "scrollback" {
         "BCD",
     };
 
-    for (rows) |row| {
-        _ = vtermz_input_write(vt, "\r\n", 2);
+    for (rows, 0..) |row, idx| {
+        if (idx > 0) {
+            _ = vtermz_input_write(vt, "\r\n", 2);
+        }
         _ = vtermz_input_write(vt, row.ptr, row.len);
     }
 
@@ -2591,4 +2511,25 @@ test "scrollback" {
         }
         try vt.t.scrollViewport(.{ .delta = -1 });
     }
+
+    vt.t.screens.active.scroll(.{ .row = 100 });
+    vtermz_refresh(vt);
+    for (0..rows.len - vt.t.rows) |scroll_amount| {
+        vtermz_refresh(vt);
+        for (rows[rows.len - vt.t.rows - scroll_amount .. rows.len - scroll_amount], 0..) |row, idx| {
+            _ = vtermz_fill_buf_row_utf8(vt, @intCast(idx), 0, 20, &out_buf, out_buf.len);
+            try std.testing.expectEqualSlices(u8, row, out_buf[0..row.len]);
+        }
+        try vt.t.scrollViewport(.{ .delta = -1 });
+    }
+
+    vt.t.screens.active.scroll(.{ .row = 1 });
+    vtermz_refresh(vt);
+    _ = vtermz_fill_buf_row_utf8(vt, 0, 0, 20, &out_buf, out_buf.len);
+    try std.testing.expectEqualSlices(u8, rows[1], out_buf[0..rows[1].len]);
+
+    vt.t.screens.active.scroll(.{ .row = 100 });
+    vtermz_refresh(vt);
+    _ = vtermz_fill_buf_row_utf8(vt, 0, 0, 20, &out_buf, out_buf.len);
+    try std.testing.expectEqualSlices(u8, rows[rows.len - vt.t.rows], out_buf[0..rows[rows.len - vt.t.rows].len]);
 }

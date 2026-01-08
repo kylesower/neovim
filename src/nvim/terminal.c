@@ -71,6 +71,7 @@
 #include "nvim/highlight_defs.h"
 #include "nvim/highlight_group.h"
 #include "nvim/keycodes.h"
+#include "nvim/log.h"
 #include "nvim/macros_defs.h"
 #include "nvim/main.h"
 #include "nvim/map_defs.h"
@@ -222,11 +223,11 @@ static VTermScreenCallbacks vterm_screen_callbacks = {
   .damage = term_damage,
   .moverect = term_moverect,
   .movecursor = NULL,
-  .settermprop = term_settermprop,
-  .bell = term_bell,
-  .theme = term_theme,
-  .sb_pushline = term_sb_push,  // Called before a line goes offscreen.
-  .sb_popline = term_sb_pop,
+  // .settermprop = term_settermprop,
+  // .bell = term_bell,
+  // .theme = term_theme,
+  // .sb_pushline = term_sb_push,  // Called before a line goes offscreen.
+  // .sb_popline = term_sb_pop,
 };
 
 static VTermZCallbacks vtermz_screen_callbacks = {
@@ -633,7 +634,7 @@ void terminal_open(Terminal **termpp, buf_T *buf, TerminalOptions opts)
   // - b:terminal_color_{NUM}
   // - g:terminal_color_{NUM}
   // - the VTerm instance
-  for (int i = 0; i < 16; i++) {
+  for (uint8_t i = 0; i < 16; i++) {
     char var[64];
     snprintf(var, sizeof(var), "terminal_color_%d", i);
     char *name = get_config_string(var);
@@ -742,8 +743,8 @@ void terminal_check_size(Terminal *term)
     return;
   }
 
-  int curwidth, curheight;
-  vterm_get_size(term->vt, &curheight, &curwidth);
+  uint16_t curwidth, curheight;
+  // vterm_get_size(term->vt, &curheight, &curwidth);
   vtermz_get_size(term->vtz, &curheight, &curwidth);
   uint16_t width = 0;
   uint16_t height = 0;
@@ -1335,8 +1336,8 @@ static int get_underline_hl_flagz(uint8_t underline)
 #ifndef VTERM_GHOSTTY
 void terminal_get_line_attributes(Terminal *term, win_T *wp, int linenr, int *term_attrs)
 {
-  int height, width;
-  vterm_get_size(term->vt, &height, &width);
+  uint16_t height, width;
+  // vterm_get_size(term->vt, &height, &width);
   vtermz_get_size(term->vtz, &height, &width);
   VTermState *state = vterm_obtain_state(term->vt);
   assert(linenr);
@@ -1401,19 +1402,19 @@ void terminal_get_line_attributes(Terminal *term, win_T *wp, int linenr, int *te
 #else
 void terminal_get_line_attributes(Terminal *term, win_T *wp, int linenr, int *term_attrs)
 {
-  int height, width;
+  uint16_t height, width;
   vtermz_get_size(term->vtz, &height, &width);
   assert(linenr);
-  int row = linenr_to_row(term, linenr);
-  if (row >= height) {
-    // Terminal height was decreased but the change wasn't reflected into the
-    // buffer yet
-    return;
-  }
+  // int row = linenr_to_row(term, linenr);
+  // if (row >= height) {
+  //   // Terminal height was decreased but the change wasn't reflected into the
+  //   // buffer yet
+  //   return;
+  // }
 
   width = MIN(TERM_ATTRS_MAX, width);
   VTermZStyle styles[TERM_ATTRS_MAX];
-  size_t num_cols = vtermz_fill_buf_row_style(term->vtz, row, 0, width, styles, TERM_ATTRS_MAX);
+  size_t num_cols = vtermz_fill_buf_lnum_style(term->vtz, (size_t)linenr - 1, 0, width, styles, TERM_ATTRS_MAX);
   for (size_t col = 0; col < num_cols; col++) {
     VTermZStyle style = styles[col];
     // VTermScreenCellZ cell = {0};
@@ -1535,6 +1536,7 @@ static int term_movecursor(VTermPos new_pos, VTermPos old_pos, int visible, void
 
 static int term_movecursorz(int row, int col, void *data)
 {
+  // WLOG("moving cursor to (%d, %d)", row, col);
   Terminal *term = data;
   term->cursor.row = row;
   term->cursor.col = col;
@@ -2209,7 +2211,9 @@ static bool send_mouse_event(Terminal *term, int c)
     }
 
     // Call the common mouse scroll function shared with other modes.
+    WLOG("before do_mousescroll: sb_pending: %d, sb_deleted: %zu", term->sb_pending, term->sb_deleted);
     do_mousescroll(&cap);
+    WLOG("after do_mousescroll: sb_pending: %d, sb_deleted: %zu", term->sb_pending, term->sb_deleted);
 
     curwin->w_redr_status = true;
     curwin = save_curwin;
@@ -2260,7 +2264,7 @@ static void fetch_row(Terminal *term, int row, int end_col)
   term->textbuf[line_len] = NUL;
 }
 
-static void fetch_rowz(Terminal *term, int row, int end_col)
+static void fetch_rowz(Terminal *term, size_t row, size_t end_col)
 {
   char *ptr = term->textbuf;
   size_t line_len = vtermz_fill_buf_row_utf8(term->vtz, row, 0, end_col, ptr, TEXTBUF_SIZE);
@@ -2282,9 +2286,7 @@ static bool fetch_cell(Terminal *term, int row, int col, VTermScreenCell *cell)
       return false;
     }
   } else {
-    // vterm_screen_get_cell(term->vts, (VTermPos){ .row = row, .col = col },
-    //                       cell);
-    vtermz_screen_get_cell(term->vtz, (VTermPos){ .row = row, .col = col },
+    vterm_screen_get_cell(term->vts, (VTermPos){ .row = row, .col = col },
                           cell);
   }
   return true;
@@ -2403,11 +2405,11 @@ static void refresh_size(Terminal *term, buf_T *buf)
   }
 
   term->pending.resize = false;
-  int width, height;
+  uint16_t width, height;
   vtermz_get_size(term->vtz, &height, &width);
   term->invalid_start = 0;
   term->invalid_end = height;
-  term->opts.resize_cb((uint16_t)width, (uint16_t)height, term->opts.data);
+  term->opts.resize_cb(width, height, term->opts.data);
 }
 
 void on_scrollback_option_changed(Terminal *term)
@@ -2460,46 +2462,50 @@ static void refresh_scrollback(Terminal *term, buf_T *buf)
   mark_adjust_buf(buf, 1, deleted, MAXLNUM, -deleted, true, kMarkAdjustTerm, kExtmarkUndo);
   term->sb_deleted_last = term->sb_deleted;
 
-  int width, height;
-  vterm_get_size(term->vt, &height, &width);
-  vtermz_get_size(term->vtz, &height, &width);
+  // int width, height;
+  // // // vterm_get_size(term->vt, &height, &width);
+  // vtermz_get_size(term->vtz, &height, &width);
 
   // May still have pending scrollback after increase in terminal height if the
   // scrollback wasn't refreshed in time; append these to the top of the buffer.
   int row_offset = term->sb_pending;
-  while (term->sb_pending > 0 && buf->b_ml.ml_line_count < height) {
-    fetch_rowz(term, term->sb_pending - row_offset - 1, width);
-    ml_append_buf(buf, 0, term->textbuf, 0, false);
-    appended_lines_buf(buf, 0, 1);
-    term->sb_pending--;
-  }
-
-  row_offset -= term->sb_pending;
-  while (term->sb_pending > 0) {
-    // This means that either the window height has decreased or the screen
-    // became full and libvterm had to push all rows up. Convert the first
-    // pending scrollback row into a string and append it just above the visible
-    // section of the buffer
-    if (((int)buf->b_ml.ml_line_count - height) >= (int)term->sb_size) {
-      // scrollback full, delete lines at the top
-      ml_delete_buf(buf, 1, false);
-      deleted_lines_buf(buf, 1, 1);
-    }
-    fetch_rowz(term, -term->sb_pending - row_offset, width);
-    int buf_index = (int)buf->b_ml.ml_line_count - height;
-    ml_append_buf(buf, buf_index, term->textbuf, 0, false);
-    appended_lines_buf(buf, buf_index, 1);
-    term->sb_pending--;
-  }
-
-  // Remove extra lines at the bottom
-  int max_line_count = (int)term->sb_current + height;
-  while (buf->b_ml.ml_line_count > max_line_count) {
-    ml_delete_buf(buf, buf->b_ml.ml_line_count, false);
-    deleted_lines_buf(buf, buf->b_ml.ml_line_count, 1);
-  }
-
-  adjust_scrollback(term, buf);
+  WLOG("refresh scrollback sb pending=%d, row_offset=%d, line_count: %d, ml_line_lnum: %d", term->sb_pending, row_offset, buf->b_ml.ml_line_count, buf->b_ml.ml_line_lnum);
+  // while (term->sb_pending > 0 && buf->b_ml.ml_line_count < height) {
+  //   WLOG("refresh scrollback fetching row: %d", term->sb_pending - row_offset - 1);
+  //   fetch_rowz(term, term->sb_pending - row_offset - 1, width);
+  //   ml_append_buf(buf, 0, term->textbuf, 0, false);
+  //   appended_lines_buf(buf, 0, 1);
+  //   term->sb_pending--;
+  // }
+  //
+  // row_offset -= term->sb_pending;
+  // while (term->sb_pending > 0) {
+  //   // This means that either the window height has decreased or the screen
+  //   // became full and libvterm had to push all rows up. Convert the first
+  //   // pending scrollback row into a string and append it just above the visible
+  //   // section of the buffer
+  //   if (((int)buf->b_ml.ml_line_count - height) >= (int)term->sb_size) {
+  //     // scrollback full, delete lines at the top
+  //     ml_delete_buf(buf, 1, false);
+  //     deleted_lines_buf(buf, 1, 1);
+  //   }
+  //   WLOG("refresh scrollback sb pending=%d, row_offset=%d, requesting row=%d", term->sb_pending, row_offset, -term->sb_pending - row_offset);
+  //   fetch_rowz(term, -term->sb_pending - row_offset, width);
+  //   int buf_index = (int)buf->b_ml.ml_line_count - height;
+  //   ml_append_buf(buf, buf_index, term->textbuf, 0, false);
+  //   appended_lines_buf(buf, buf_index, 1);
+  //   term->sb_pending--;
+  // }
+  //
+  // // Remove extra lines at the bottom
+  // int max_line_count = (int)term->sb_current + height;
+  // WLOG("deleting line from buf. max line count: %d, ml_line_count: %d", max_line_count, buf->b_ml.ml_line_count);
+  // while (buf->b_ml.ml_line_count > max_line_count) {
+  //   ml_delete_buf(buf, buf->b_ml.ml_line_count, false);
+  //   deleted_lines_buf(buf, buf->b_ml.ml_line_count, 1);
+  // }
+  //
+  // adjust_scrollback(term, buf);
 }
 
 // Refresh the screen (visible part of the buffer when the terminal is
@@ -2508,38 +2514,49 @@ static void refresh_screen(Terminal *term, buf_T *buf)
 {
   int changed = 0;
   int added = 0;
-  int height;
-  int width;
-  vterm_get_size(term->vt, &height, &width);
+  uint16_t height;
+  uint16_t width;
+  // vterm_get_size(term->vt, &height, &width);
   vtermz_get_size(term->vtz, &height, &width);
   // Terminal height may have decreased before `invalid_end` reflects it.
-  term->invalid_end = MIN(term->invalid_end, height);
+  // term->invalid_end = MIN(term->invalid_end, height);
 
-  // There are no invalid rows.
-  if (term->invalid_start >= term->invalid_end) {
-    term->invalid_start = INT_MAX;
-    term->invalid_end = -1;
-    return;
-  }
+  // // There are no invalid rows.
+  // if (term->invalid_start >= term->invalid_end) {
+  //   term->invalid_start = INT_MAX;
+  //   term->invalid_end = -1;
+  //   return;
+  // }
 
-  for (int r = term->invalid_start, linenr = row_to_linenr(term, r);
-       r < term->invalid_end; r++, linenr++) {
+  // int new_line_count = vtermz_get_new_line_count(term->vtz);
+  // int new_line_count = 41;
+  // for (int r = height - new_line_count, linenr = buf->b_ml.ml_line_count - r; r < height; r++, linenr++) {
+  // size_t top_linenr = (size_t)MAX(buf->b_ml.ml_line_count - height, 0);
+  // size_t top_linenr = vtermz_scroll_bottom(term->vtz);
+  size_t top_linenr = vtermz_top_linenr(term->vtz);
+  WLOG("refresh screen start=%d, end=%d, top_linenr=%zu", term->invalid_start, term->invalid_end, top_linenr);
+  // top_linenr = vtermz_scroll_linenr(term->vtz, top_linenr);
+  for (size_t r = 0, linenr = top_linenr + 1;
+       r < height; r++, linenr++) {
+  // for (int r = term->invalid_start, linenr = row_to_linenr(term, r);
+  //      r < term->invalid_end; r++, linenr++) {
+    // WLOG("appending to buf: row=%zu, linenr=%zu", r, linenr);
     fetch_rowz(term, r, width);
 
-    if (linenr <= buf->b_ml.ml_line_count) {
-      ml_replace_buf(buf, linenr, term->textbuf, true, false);
+    if ((linenr_T)linenr <= buf->b_ml.ml_line_count) {
+      ml_replace_buf(buf, (linenr_T)linenr, term->textbuf, true, false);
       changed++;
     } else {
-      ml_append_buf(buf, linenr - 1, term->textbuf, 0, false);
+      ml_append_buf(buf, (linenr_T)linenr - 1, term->textbuf, 0, false);
       added++;
     }
   }
 
-  int change_start = row_to_linenr(term, term->invalid_start);
+  int change_start = (int)top_linenr; // row_to_linenr(term, term->invalid_start);
   int change_end = change_start + changed;
   changed_lines(buf, change_start, 0, change_end, added, true);
-  term->invalid_start = INT_MAX;
-  term->invalid_end = -1;
+  // term->invalid_start = INT_MAX;
+  // term->invalid_end = -1;
 }
 
 static void adjust_topline_cursor(Terminal *term, buf_T *buf, int added)
