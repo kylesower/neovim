@@ -150,6 +150,20 @@ pub const Handler = struct {
                 };
                 self.terminal.modes.set(.cursor_blinking, blink);
                 self.terminal.screens.active.cursor.cursor_style = style;
+                if (self.callbacks.cursor_style) |cursor_style| {
+                    _ = cursor_style(
+                        .{
+                            .shape = switch (style) {
+                                .block => c.VTERMZ_CURSOR_BLOCK,
+                                .bar => c.VTERMZ_CURSOR_BAR,
+                                .underline => c.VTERMZ_CURSOR_UNDERLINE,
+                                else => c.VTERMZ_CURSOR_BLOCK,
+                            },
+                            .blink = blink,
+                        },
+                        self.cbdata,
+                    );
+                }
             },
             .erase_display_below => self.terminal.eraseDisplay(.below, value),
             .erase_display_above => self.terminal.eraseDisplay(.above, value),
@@ -876,6 +890,7 @@ pub const VTermZCallbacks = extern struct {
     osc_color: ?*const fn (osc: VTermZOscColor, user: ?*anyopaque) callconv(.c) c_int = null,
     on_apc: ?*const fn (buf: [*]const u8, len: usize, user: ?*anyopaque) callconv(.c) c_int = null,
     on_dcs: ?*const fn (buf: [*]const u8, len: usize, user: ?*anyopaque) callconv(.c) c_int = null,
+    cursor_style: ?*const fn (style: c.VTermZCursorStyle, user: ?*anyopaque) callconv(.c) c_int = null,
     // sb_pushline: ?*const fn (
     //     cols: c_int,
     //     cells: [*]const VTermScreenCell,

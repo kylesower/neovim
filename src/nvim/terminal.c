@@ -237,6 +237,7 @@ static VTermZCallbacks vtermz_screen_callbacks = {
   .theme = term_theme,
   .osc_color = on_osc_color,
   .on_apc = on_apcz,
+  .cursor_style = term_cursor_style,
   // .on_dcs = on_dcsz,
 };
 
@@ -449,6 +450,18 @@ static int on_apcz(const char *buf, size_t len, void *user) {
 //
 //   return 1;
 // }
+//
+static int term_cursor_style(VTermZCursorStyle style, void *user) {
+  Terminal *term = user;
+  term->cursor.blink = style.blink;
+  term->cursor.shape = (int)style.shape;
+  term->cursor.visible = true;
+  term->pending.cursor = true;
+  WLOG("set cursor blink to %d and shape to %d", style.blink, style.shape);
+
+  invalidate_terminal(term, -1, -1);
+  return 1;
+}
 
 static int on_apc(VTermStringFragment frag, void *user)
 {
@@ -1333,73 +1346,72 @@ static int get_underline_hl_flagz(uint8_t underline)
   }
 }
 
-#ifndef VTERM_GHOSTTY
-void terminal_get_line_attributes(Terminal *term, win_T *wp, int linenr, int *term_attrs)
-{
-  uint16_t height, width;
-  // vterm_get_size(term->vt, &height, &width);
-  vtermz_get_size(term->vtz, &height, &width);
-  VTermState *state = vterm_obtain_state(term->vt);
-  assert(linenr);
-  int row = linenr_to_row(term, linenr);
-  if (row >= height) {
-    // Terminal height was decreased but the change wasn't reflected into the
-    // buffer yet
-    return;
-  }
+// void terminal_get_line_attributes(Terminal *term, win_T *wp, int linenr, int *term_attrs)
+// {
+//   uint16_t height, width;
+//   // vterm_get_size(term->vt, &height, &width);
+//   vtermz_get_size(term->vtz, &height, &width);
+//   VTermState *state = vterm_obtain_state(term->vt);
+//   assert(linenr);
+//   int row = linenr_to_row(term, linenr);
+//   if (row >= height) {
+//     // Terminal height was decreased but the change wasn't reflected into the
+//     // buffer yet
+//     return;
+//   }
+//
+//   width = MIN(TERM_ATTRS_MAX, width);
+//   for (int col = 0; col < width; col++) {
+//     VTermScreenCell cell = {0};
+//     bool color_valid = fetch_cell(term, row, col, &cell);
+//     bool fg_default = !color_valid || VTERM_COLOR_IS_DEFAULT_FG(&cell.fg);
+//     bool bg_default = !color_valid || VTERM_COLOR_IS_DEFAULT_BG(&cell.bg);
+//
+//     // Get the rgb value set by libvterm.
+//     int vt_fg = fg_default ? -1 : get_rgb(state, cell.fg);
+//     int vt_bg = bg_default ? -1 : get_rgb(state, cell.bg);
+//
+//     bool fg_indexed = VTERM_COLOR_IS_INDEXED(&cell.fg);
+//     bool bg_indexed = VTERM_COLOR_IS_INDEXED(&cell.bg);
+//
+//     int16_t vt_fg_idx = ((!fg_default && fg_indexed) ? cell.fg.indexed.idx + 1 : 0);
+//     int16_t vt_bg_idx = ((!bg_default && bg_indexed) ? cell.bg.indexed.idx + 1 : 0);
+//
+//     bool fg_set = vt_fg_idx && vt_fg_idx <= 16 && term->color_set[vt_fg_idx - 1];
+//     bool bg_set = vt_bg_idx && vt_bg_idx <= 16 && term->color_set[vt_bg_idx - 1];
+//
+//     int hl_attrs = (cell.attrs.bold ? HL_BOLD : 0)
+//                    | (cell.attrs.italic ? HL_ITALIC : 0)
+//                    | (cell.attrs.reverse ? HL_INVERSE : 0)
+//                    | get_underline_hl_flag(cell.attrs)
+//                    | (cell.attrs.strike ? HL_STRIKETHROUGH : 0)
+//                    | ((fg_indexed && !fg_set) ? HL_FG_INDEXED : 0)
+//                    | ((bg_indexed && !bg_set) ? HL_BG_INDEXED : 0);
+//
+//     int attr_id = 0;
+//
+//     if (hl_attrs || !fg_default || !bg_default) {
+//       attr_id = hl_get_term_attr(&(HlAttrs) {
+//         .cterm_ae_attr = (int16_t)hl_attrs,
+//         .cterm_fg_color = vt_fg_idx,
+//         .cterm_bg_color = vt_bg_idx,
+//         .rgb_ae_attr = (int16_t)hl_attrs,
+//         .rgb_fg_color = vt_fg,
+//         .rgb_bg_color = vt_bg,
+//         .rgb_sp_color = -1,
+//         .hl_blend = -1,
+//         .url = -1,
+//       });
+//     }
+//
+//     if (cell.uri > 0) {
+//       attr_id = hl_combine_attr(attr_id, cell.uri);
+//     }
+//
+//     term_attrs[col] = attr_id;
+//   }
+// }
 
-  width = MIN(TERM_ATTRS_MAX, width);
-  for (int col = 0; col < width; col++) {
-    VTermScreenCell cell = {0};
-    bool color_valid = fetch_cell(term, row, col, &cell);
-    bool fg_default = !color_valid || VTERM_COLOR_IS_DEFAULT_FG(&cell.fg);
-    bool bg_default = !color_valid || VTERM_COLOR_IS_DEFAULT_BG(&cell.bg);
-
-    // Get the rgb value set by libvterm.
-    int vt_fg = fg_default ? -1 : get_rgb(state, cell.fg);
-    int vt_bg = bg_default ? -1 : get_rgb(state, cell.bg);
-
-    bool fg_indexed = VTERM_COLOR_IS_INDEXED(&cell.fg);
-    bool bg_indexed = VTERM_COLOR_IS_INDEXED(&cell.bg);
-
-    int16_t vt_fg_idx = ((!fg_default && fg_indexed) ? cell.fg.indexed.idx + 1 : 0);
-    int16_t vt_bg_idx = ((!bg_default && bg_indexed) ? cell.bg.indexed.idx + 1 : 0);
-
-    bool fg_set = vt_fg_idx && vt_fg_idx <= 16 && term->color_set[vt_fg_idx - 1];
-    bool bg_set = vt_bg_idx && vt_bg_idx <= 16 && term->color_set[vt_bg_idx - 1];
-
-    int hl_attrs = (cell.attrs.bold ? HL_BOLD : 0)
-                   | (cell.attrs.italic ? HL_ITALIC : 0)
-                   | (cell.attrs.reverse ? HL_INVERSE : 0)
-                   | get_underline_hl_flag(cell.attrs)
-                   | (cell.attrs.strike ? HL_STRIKETHROUGH : 0)
-                   | ((fg_indexed && !fg_set) ? HL_FG_INDEXED : 0)
-                   | ((bg_indexed && !bg_set) ? HL_BG_INDEXED : 0);
-
-    int attr_id = 0;
-
-    if (hl_attrs || !fg_default || !bg_default) {
-      attr_id = hl_get_term_attr(&(HlAttrs) {
-        .cterm_ae_attr = (int16_t)hl_attrs,
-        .cterm_fg_color = vt_fg_idx,
-        .cterm_bg_color = vt_bg_idx,
-        .rgb_ae_attr = (int16_t)hl_attrs,
-        .rgb_fg_color = vt_fg,
-        .rgb_bg_color = vt_bg,
-        .rgb_sp_color = -1,
-        .hl_blend = -1,
-        .url = -1,
-      });
-    }
-
-    if (cell.uri > 0) {
-      attr_id = hl_combine_attr(attr_id, cell.uri);
-    }
-
-    term_attrs[col] = attr_id;
-  }
-}
-#else
 void terminal_get_line_attributes(Terminal *term, win_T *wp, int linenr, int *term_attrs)
 {
   uint16_t height, width;
@@ -1472,7 +1484,6 @@ void terminal_get_line_attributes(Terminal *term, win_T *wp, int linenr, int *te
     term_attrs[col] = attr_id;
   }
 }
-#endif
 
 Buffer terminal_buf(const Terminal *term)
 {

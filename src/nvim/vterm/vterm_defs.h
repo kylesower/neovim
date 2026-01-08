@@ -400,6 +400,17 @@ typedef struct {
   VTermZTerminator terminator; // The terminator used in the original request
 } VTermZOscColor;
 
+typedef enum {
+  VTERMZ_CURSOR_BLOCK = 1,
+  VTERMZ_CURSOR_UNDERLINE,
+  VTERMZ_CURSOR_BAR,
+} VTermZCursorShape;
+
+typedef struct {
+  bool blink;
+  VTermZCursorShape shape;
+} VTermZCursorStyle;
+
 typedef struct {
   // TODO: do we need these other callbacks?
   // int (*damage)(VTermRect rect, void *user);
@@ -411,6 +422,7 @@ typedef struct {
   int (*osc_color)(VTermZOscColor osc, void *user);
   int (*on_apc)(const char *buf, size_t len, void *user);
   int (*on_dcs)(const char *buf, size_t len, void *user);
+  int (*cursor_style)(VTermZCursorStyle style, void *user);
   // int (*sb_pushline)(int cols, const VTermScreenCell *cells, void *user);
   // int (*sb_popline)(int cols, VTermScreenCell *cells, void *user);
   // int (*sb_clear)(void *user);
