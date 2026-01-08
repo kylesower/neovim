@@ -408,6 +408,7 @@ typedef enum {
 
 typedef struct {
   bool blink;
+  bool visible;
   VTermZCursorShape shape;
 } VTermZCursorStyle;
 

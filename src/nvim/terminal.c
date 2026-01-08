@@ -455,9 +455,8 @@ static int term_cursor_style(VTermZCursorStyle style, void *user) {
   Terminal *term = user;
   term->cursor.blink = style.blink;
   term->cursor.shape = (int)style.shape;
-  term->cursor.visible = true;
+  term->cursor.visible = style.visible;
   term->pending.cursor = true;
-  WLOG("set cursor blink to %d and shape to %d", style.blink, style.shape);
 
   invalidate_terminal(term, -1, -1);
   return 1;

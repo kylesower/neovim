@@ -154,13 +154,14 @@ pub const Handler = struct {
                 if (self.callbacks.cursor_style) |cursor_style| {
                     _ = cursor_style(
                         .{
+                            .blink = blink,
+                            .visible = self.terminal.modes.get(.cursor_visible),
                             .shape = switch (style) {
                                 .block => c.VTERMZ_CURSOR_BLOCK,
                                 .bar => c.VTERMZ_CURSOR_BAR,
                                 .underline => c.VTERMZ_CURSOR_UNDERLINE,
                                 else => c.VTERMZ_CURSOR_BLOCK,
                             },
-                            .blink = blink,
                         },
                         self.cbdata,
                     );
@@ -328,6 +329,24 @@ pub const Handler = struct {
             .alt_screen_legacy => try self.terminal.switchScreenMode(.@"47", enabled),
             .alt_screen => try self.terminal.switchScreenMode(.@"1047", enabled),
             .alt_screen_save_cursor_clear_enter => try self.terminal.switchScreenMode(.@"1049", enabled),
+
+            .cursor_visible => {
+                if (self.callbacks.cursor_style) |cursor_style| {
+                    _ = cursor_style(
+                        .{
+                            .blink = self.terminal.modes.get(.cursor_blinking),
+                            .visible = enabled,
+                            .shape = switch (self.terminal.screens.active.cursor.cursor_style) {
+                                .block => c.VTERMZ_CURSOR_BLOCK,
+                                .bar => c.VTERMZ_CURSOR_BAR,
+                                .underline => c.VTERMZ_CURSOR_UNDERLINE,
+                                else => c.VTERMZ_CURSOR_BLOCK,
+                            },
+                        },
+                        self.cbdata,
+                    );
+                }
+            },
 
             .save_cursor => if (enabled) {
                 self.terminal.saveCursor();
