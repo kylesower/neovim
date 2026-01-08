@@ -1545,11 +1545,11 @@ static int term_movecursor(VTermPos new_pos, VTermPos old_pos, int visible, void
   return 1;
 }
 
-static int term_movecursorz(int row, int col, void *data)
+static int term_movecursorz(int row, int col, int row_abs, void *data)
 {
   // WLOG("moving cursor to (%d, %d)", row, col);
   Terminal *term = data;
-  term->cursor.row = row;
+  term->cursor.row = row_abs;
   term->cursor.col = col;
   invalidate_terminal(term, -1, -1);
   return 1;

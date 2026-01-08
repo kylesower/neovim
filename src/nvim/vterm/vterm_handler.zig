@@ -110,6 +110,7 @@ pub const Handler = struct {
         value: Action.Value(action),
     ) !void {
         const cursor_init = self.terminal.screens.active.cursor;
+        const cursor_y_init_abs = self.terminal.screens.active.pages.total_rows - self.terminal.rows + cursor_init.y;
         switch (action) {
             .print => try self.terminal.print(value.cp),
             .print_repeat => try self.terminal.printRepeat(value),
@@ -276,11 +277,13 @@ pub const Handler = struct {
 
         const cursor_x = self.terminal.screens.active.cursor.x;
         const cursor_y = self.terminal.screens.active.cursor.y;
-        if (cursor_x != cursor_init.x or cursor_y != cursor_init.y) {
+        const cursor_y_abs = self.terminal.screens.active.pages.total_rows - self.terminal.rows + cursor_y;
+        if (cursor_x != cursor_init.x or cursor_y != cursor_init.y or cursor_y_abs != cursor_y_init_abs) {
             if (self.callbacks.movecursor) |movecursor| {
                 _ = movecursor(
                     cursor_y,
                     cursor_x,
+                    @intCast(cursor_y_abs),
                     self.cbdata,
                 );
             }
@@ -878,6 +881,7 @@ pub const VTermZCallbacks = extern struct {
     movecursor: ?*const fn (
         row: c_int,
         col: c_int,
+        row_abs: c_int,
         user: ?*anyopaque,
     ) callconv(.c) c_int = null,
     // settermprop: ?*const fn (

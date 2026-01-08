@@ -415,7 +415,7 @@ typedef struct {
   // TODO: do we need these other callbacks?
   // int (*damage)(VTermRect rect, void *user);
   // int (*moverect)(VTermRect dest, VTermRect src, void *user);
-  int (*movecursor)(int row, int col, void *user);
+  int (*movecursor)(int row, int col, int row_abs, void *user);
   // int (*settermprop)(VTermProp prop, VTermValue *val, void *user);
   int (*bell)(void *user);
   int (*theme)(bool *dark, void *user);
