@@ -2139,6 +2139,43 @@ pub export fn vtermz_fill_buf_row_utf8(
     return idx;
 }
 
+pub export fn vtermz_fill_buf_lnum_utf8(
+    vt: *VTerm,
+    /// Zero-indexed line number
+    lnum: usize,
+    start_col: usize,
+    /// End col exclusive
+    end_col: usize,
+    buf: [*]u8,
+    buf_max_len: usize,
+) callconv(.c) usize {
+    if (lnum >= vt.t.screens.active.pages.total_rows or start_col > end_col or end_col == 0) {
+        // log.warn(@src(), "lnum {} out of range. total rows: {}, start_col: {}, end_col: {}", .{lnum, vt.t.screens.active.pages.total_rows, start_col, end_col});
+        return 0;
+    }
+    log.warn(@src(), "getting lnum style for lnum={}", .{lnum});
+    // TODO: I'm not sure how to avoid this if the caller needs to request arbitrary
+    // line numbers. Getting the scrollbar every time is potentially expensive.
+    const sb = vt.t.screens.active.pages.scrollbar();
+    const to_scroll = @as(isize, @intCast(lnum)) - @as(isize, @intCast(sb.offset));
+    log.warn(@src(), "sb: {any}, to_scroll={}", .{sb, to_scroll});
+    return if (to_scroll >= 0 and to_scroll < sb.len) blk: {
+        // row is already in viewport
+        log.warn(@src(), "lnum exists at row {}, no scroll necessary", .{to_scroll});
+        break :blk vtermz_fill_buf_row_utf8(vt, @intCast(to_scroll), start_col, end_col, buf, buf_max_len);
+    } else blk: {
+        // TODO: I'm not sure how to avoid this if the caller needs to request arbitrary
+        // line numbers. This is terrible.
+        log.warn(@src(), "scrolling {}", .{to_scroll});
+        vt.t.scrollViewport(.{ .delta = to_scroll }) catch {};
+        vtermz_refresh(vt);
+        const res = vtermz_fill_buf_row_utf8(vt, 0, start_col, end_col, buf, buf_max_len);
+        vt.t.scrollViewport(.{ .delta = -to_scroll }) catch {};
+        vtermz_refresh(vt);
+        break :blk res;
+    };
+}
+
 /// Fills buf with cell styles from the terminal on row `row` from `start_col` to `end_col`.
 /// Returns number of columns filled out, which could be less than `end_col` depending on
 /// how many columns are truly in the row (as well as `buf_max_len`).
@@ -2279,6 +2316,10 @@ pub export fn vtermz_scroll_bottom(vt: *VTerm) callconv(.c) usize {
 
 pub export fn vtermz_top_linenr(vt: *VTerm) callconv(.c) usize {
     return vt.t.screens.active.pages.total_rows - vt.t.rows;
+}
+
+pub export fn vtermz_total_rows(vt: *VTerm) callconv(.c) usize {
+    return vt.t.screens.active.pages.total_rows;
 }
 
 // // 263:        VTERM_TERMINATOR_BEL ? STATIC_CSTR_AS_OBJ("\x07") : STATIC_CSTR_AS_OBJ("\x1b\\"));

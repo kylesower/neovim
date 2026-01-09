@@ -451,6 +451,14 @@ size_t vtermz_fill_buf_row_utf8(
     char *buf,
     size_t buf_max_len
 );
+size_t vtermz_fill_buf_lnum_utf8(
+    const VTermZ *vt,
+    size_t lnum,
+    size_t start_col,
+    size_t end_col,
+    char *buf,
+    size_t buf_max_len
+);
 size_t vtermz_fill_buf_row_style(
     const VTermZ *vt,
     size_t row,
@@ -471,3 +479,4 @@ int vtermz_color_rgb_int(const VTermZ *vt, VTermZColor color);
 size_t vtermz_scroll_linenr(VTermZ *vt, size_t top_linenr);
 size_t vtermz_scroll_bottom(VTermZ *vt);
 size_t vtermz_top_linenr(VTermZ *vt);
+size_t vtermz_total_rows(VTermZ *vt);

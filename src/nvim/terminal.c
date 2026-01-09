@@ -2281,6 +2281,13 @@ static void fetch_rowz(Terminal *term, size_t row, size_t end_col)
   term->textbuf[line_len] = NUL;
 }
 
+static void fetch_lnum(Terminal *term, size_t lnum, size_t end_col)
+{
+  char *ptr = term->textbuf;
+  size_t line_len = vtermz_fill_buf_lnum_utf8(term->vtz, lnum - 1, 0, end_col, ptr, TEXTBUF_SIZE);
+  term->textbuf[line_len] = NUL;
+}
+
 static bool fetch_cell(Terminal *term, int row, int col, VTermScreenCell *cell)
 {
   if (row < 0) {
@@ -2544,14 +2551,31 @@ static void refresh_screen(Terminal *term, buf_T *buf)
   // size_t top_linenr = (size_t)MAX(buf->b_ml.ml_line_count - height, 0);
   // size_t top_linenr = vtermz_scroll_bottom(term->vtz);
   size_t top_linenr = vtermz_top_linenr(term->vtz);
-  WLOG("refresh screen start=%d, end=%d, top_linenr=%zu", term->invalid_start, term->invalid_end, top_linenr);
+  size_t total_rows = vtermz_total_rows(term->vtz);
+  // WLOG("refresh screen start=%d, end=%d, top_linenr=%zu", term->invalid_start, term->invalid_end, top_linenr);
+  WLOG("refresh screen start=%d, end=%d, top_linenr=%zu, ml_line_count: %d, ml_line_lnum: %d", term->invalid_start, term->invalid_end, top_linenr, buf->b_ml.ml_line_count, buf->b_ml.ml_line_lnum);
   // top_linenr = vtermz_scroll_linenr(term->vtz, top_linenr);
-  for (size_t r = 0, linenr = top_linenr + 1;
-       r < height; r++, linenr++) {
+  // for (size_t r = 0, linenr = top_linenr + 1;
+  //      r < height; r++, linenr++) {
+  // // for (int r = term->invalid_start, linenr = row_to_linenr(term, r);
+  // //      r < term->invalid_end; r++, linenr++) {
+  //   // WLOG("appending to buf: row=%zu, linenr=%zu", r, linenr);
+  //   fetch_rowz(term, r, width);
+  //   WLOG("setting line %zu to value:'%s'", linenr, term->textbuf);
+  //
+  //   if ((linenr_T)linenr <= buf->b_ml.ml_line_count) {
+  //     ml_replace_buf(buf, (linenr_T)linenr, term->textbuf, true, false);
+  //     changed++;
+  //   } else {
+  //     ml_append_buf(buf, (linenr_T)linenr - 1, term->textbuf, 0, false);
+  //     added++;
+  //   }
+  // }
+  for (size_t linenr = 1; linenr <= total_rows; linenr++) {
   // for (int r = term->invalid_start, linenr = row_to_linenr(term, r);
   //      r < term->invalid_end; r++, linenr++) {
     // WLOG("appending to buf: row=%zu, linenr=%zu", r, linenr);
-    fetch_rowz(term, r, width);
+    fetch_lnum(term, linenr, width);
 
     if ((linenr_T)linenr <= buf->b_ml.ml_line_count) {
       ml_replace_buf(buf, (linenr_T)linenr, term->textbuf, true, false);
