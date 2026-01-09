@@ -416,7 +416,9 @@ typedef struct {
   // TODO: do we need these other callbacks?
   // int (*damage)(VTermRect rect, void *user);
   // int (*moverect)(VTermRect dest, VTermRect src, void *user);
-  int (*movecursor)(int row, int col, int row_abs, void *user);
+  int (*movecursor)(size_t row, size_t col, size_t row_abs, void *user);
+  int (*damage)(size_t start_row, size_t end_row, size_t start_row_abs, size_t end_row_abs, void *user);
+  // damage: ?*const fn (start_row: usize, end_row: usize, start_lnum: usize, end_lnum: usize, user: ?*anyopaque) callconv(.c) c_int = null,
   // int (*settermprop)(VTermProp prop, VTermValue *val, void *user);
   int (*bell)(void *user);
   int (*theme)(bool *dark, void *user);
@@ -480,3 +482,5 @@ size_t vtermz_scroll_linenr(VTermZ *vt, size_t top_linenr);
 size_t vtermz_scroll_bottom(VTermZ *vt);
 size_t vtermz_top_linenr(VTermZ *vt);
 size_t vtermz_total_rows(VTermZ *vt);
+void vtermz_save_cursor(VTermZ *vt);
+void vtermz_restore_cursor(VTermZ *vt);

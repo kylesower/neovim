@@ -220,8 +220,8 @@ struct terminal {
 //   .sb_popline = term_sb_pop,
 // };
 static VTermScreenCallbacks vterm_screen_callbacks = {
-  .damage = term_damage,
-  .moverect = term_moverect,
+  // .damage = term_damage,
+  // .moverect = term_moverect,
   .movecursor = NULL,
   // .settermprop = term_settermprop,
   // .bell = term_bell,
@@ -232,6 +232,7 @@ static VTermScreenCallbacks vterm_screen_callbacks = {
 
 static VTermZCallbacks vtermz_screen_callbacks = {
   .movecursor = term_movecursorz,
+  .damage = term_damagez,
   // .settermprop = term_settermprop,
   .bell = term_bell,
   .theme = term_theme,
@@ -1544,13 +1545,20 @@ static int term_movecursor(VTermPos new_pos, VTermPos old_pos, int visible, void
   return 1;
 }
 
-static int term_movecursorz(int row, int col, int row_abs, void *data)
+static int term_movecursorz(size_t row, size_t col, size_t row_abs, void *data)
 {
   // WLOG("moving cursor to (%d, %d)", row, col);
   Terminal *term = data;
-  term->cursor.row = row_abs;
-  term->cursor.col = col;
+  term->cursor.row = (int)row_abs;
+  term->cursor.col = (int)col;
   invalidate_terminal(term, -1, -1);
+  return 1;
+}
+
+static int term_damagez(size_t start_row, size_t end_row, size_t start_row_abs, size_t end_row_abs, void *data)
+{
+  // WLOG("term_damagzes: start_row_abs=%zu, end_row_abs=%zu", start_row_abs, end_row_abs);
+  invalidate_terminal(data, (int)start_row_abs, (int)end_row_abs);
   return 1;
 }
 
@@ -2221,9 +2229,9 @@ static bool send_mouse_event(Terminal *term, int c)
     }
 
     // Call the common mouse scroll function shared with other modes.
-    WLOG("before do_mousescroll: sb_pending: %d, sb_deleted: %zu", term->sb_pending, term->sb_deleted);
+    // WLOG("before do_mousescroll: sb_pending: %d, sb_deleted: %zu", term->sb_pending, term->sb_deleted);
     do_mousescroll(&cap);
-    WLOG("after do_mousescroll: sb_pending: %d, sb_deleted: %zu", term->sb_pending, term->sb_deleted);
+    // WLOG("after do_mousescroll: sb_pending: %d, sb_deleted: %zu", term->sb_pending, term->sb_deleted);
 
     curwin->w_redr_status = true;
     curwin = save_curwin;
@@ -2284,7 +2292,7 @@ static void fetch_rowz(Terminal *term, size_t row, size_t end_col)
 static void fetch_lnum(Terminal *term, size_t lnum, size_t end_col)
 {
   char *ptr = term->textbuf;
-  size_t line_len = vtermz_fill_buf_lnum_utf8(term->vtz, lnum - 1, 0, end_col, ptr, TEXTBUF_SIZE);
+  size_t line_len = vtermz_fill_buf_lnum_utf8(term->vtz, lnum, 0, end_col, ptr, TEXTBUF_SIZE);
   term->textbuf[line_len] = NUL;
 }
 
@@ -2337,6 +2345,7 @@ static void refresh_terminal(Terminal *term)
   }
   linenr_T ml_before = buf->b_ml.ml_line_count;
 
+  // WLOG("refresh_terminal invalid start=%d, invalid_end=%d", term->invalid_start, term->invalid_end);
   vtermz_refresh(term->vtz);
   refresh_size(term, buf);
   refresh_scrollback(term, buf);
@@ -2486,7 +2495,7 @@ static void refresh_scrollback(Terminal *term, buf_T *buf)
   // May still have pending scrollback after increase in terminal height if the
   // scrollback wasn't refreshed in time; append these to the top of the buffer.
   int row_offset = term->sb_pending;
-  WLOG("refresh scrollback sb pending=%d, row_offset=%d, line_count: %d, ml_line_lnum: %d", term->sb_pending, row_offset, buf->b_ml.ml_line_count, buf->b_ml.ml_line_lnum);
+  // WLOG("refresh scrollback sb pending=%d, row_offset=%d, line_count: %d, ml_line_lnum: %d", term->sb_pending, row_offset, buf->b_ml.ml_line_count, buf->b_ml.ml_line_lnum);
   // while (term->sb_pending > 0 && buf->b_ml.ml_line_count < height) {
   //   WLOG("refresh scrollback fetching row: %d", term->sb_pending - row_offset - 1);
   //   fetch_rowz(term, term->sb_pending - row_offset - 1, width);
@@ -2535,33 +2544,105 @@ static void refresh_screen(Terminal *term, buf_T *buf)
   uint16_t width;
   // vterm_get_size(term->vt, &height, &width);
   vtermz_get_size(term->vtz, &height, &width);
+  // WLOG("refresh_screen invalid start=%d, invalid_end=%d", term->invalid_start, term->invalid_end);
+  // size_t total_rows = vtermz_total_rows(term->vtz);
+  // FOR_ALL_TAB_WINDOWS(tp, wp) {
+  //   if (wp->w_buffer == buf) {
+  //     size_t topline = (size_t)wp->w_topline;
+  //     WLOG("topline: %zu", topline);
+  //     // size_t botline = (size_t)wp->w_botline;
+  //     vtermz_save_cursor(term->vtz);
+  //     size_t vt_topline = vtermz_scroll_linenr(term->vtz, topline - 1);
+  //     for (size_t row = 0, linenr = vt_topline + 1; row < height; row++, linenr++) {
+  //       fetch_rowz(term, row, width);
+  //
+  //       if ((linenr_T)linenr <= buf->b_ml.ml_line_count) {
+  //         ml_replace_buf(buf, (linenr_T)linenr, term->textbuf, true, false);
+  //         changed++;
+  //       } else {
+  //         ml_append_buf(buf, (linenr_T)linenr - 1, term->textbuf, 0, false);
+  //         added++;
+  //       }
+  //     }
+  //     size_t vt_newtop = vtermz_scroll_linenr(term->vtz, (size_t)wp->w_botline);
+  //     for (size_t row = 0, linenr = vt_newtop + 1; row < height; row++, linenr++) {
+  //       fetch_rowz(term, row, width);
+  //
+  //       if ((linenr_T)linenr <= buf->b_ml.ml_line_count) {
+  //         ml_replace_buf(buf, (linenr_T)linenr, term->textbuf, true, false);
+  //         changed++;
+  //       } else {
+  //         ml_append_buf(buf, (linenr_T)linenr - 1, term->textbuf, 0, false);
+  //         added++;
+  //       }
+  //     }
+  //     vtermz_restore_cursor(term->vtz);
+  //     int change_start = (int)vt_topline; // row_to_linenr(term, term->invalid_start);
+  //     int change_end = change_start + changed;
+  //     changed_lines(buf, change_start, 0, change_end, added, true);
+  //
+  //   }
+  // }
   // Terminal height may have decreased before `invalid_end` reflects it.
   // term->invalid_end = MIN(term->invalid_end, height);
 
   // // There are no invalid rows.
-  // if (term->invalid_start >= term->invalid_end) {
-  //   term->invalid_start = INT_MAX;
-  //   term->invalid_end = -1;
-  //   return;
-  // }
+  if (term->invalid_start >= term->invalid_end) {
+    term->invalid_start = INT_MAX;
+    term->invalid_end = -1;
+    return;
+  }
 
   // int new_line_count = vtermz_get_new_line_count(term->vtz);
   // int new_line_count = 41;
   // for (int r = height - new_line_count, linenr = buf->b_ml.ml_line_count - r; r < height; r++, linenr++) {
   // size_t top_linenr = (size_t)MAX(buf->b_ml.ml_line_count - height, 0);
   // size_t top_linenr = vtermz_scroll_bottom(term->vtz);
-  size_t top_linenr = vtermz_top_linenr(term->vtz);
-  size_t total_rows = vtermz_total_rows(term->vtz);
-  // WLOG("refresh screen start=%d, end=%d, top_linenr=%zu", term->invalid_start, term->invalid_end, top_linenr);
-  WLOG("refresh screen start=%d, end=%d, top_linenr=%zu, ml_line_count: %d, ml_line_lnum: %d", term->invalid_start, term->invalid_end, top_linenr, buf->b_ml.ml_line_count, buf->b_ml.ml_line_lnum);
+  // size_t top_linenr = vtermz_top_linenr(term->vtz);
+  // size_t total_rows = vtermz_total_rows(term->vtz);
+  // // WLOG("refresh screen start=%d, end=%d, top_linenr=%zu", term->invalid_start, term->invalid_end, top_linenr);
+  // WLOG("refresh screen start=%d, end=%d, top_linenr=%zu, ml_line_count: %d, ml_line_lnum: %d", term->invalid_start, term->invalid_end, top_linenr, buf->b_ml.ml_line_count, buf->b_ml.ml_line_lnum);
   // top_linenr = vtermz_scroll_linenr(term->vtz, top_linenr);
+  // vtermz_scroll_linenr(term->vtz, (size_t)MAX(term->invalid_start - 1, 0));
+  // int remaining = term->invalid_end - term->invalid_start;
+  linenr_T linenr = term->invalid_start + 1;
+  linenr_T top_linenr = 0;
+  size_t row = 0;
+  for (int remaining = term->invalid_end - term->invalid_start; remaining > 0; row++, remaining--, linenr++) {
+    if (row % height == 0) {
+      if (top_linenr > 0) {
+        // scroll down by screen height
+        top_linenr = 1 + (int)vtermz_scroll_linenr(term->vtz, (size_t)MAX(top_linenr + height - 1, 0));
+      } else {
+        // initial scroll to invalid start
+        top_linenr = 1 + (int)vtermz_scroll_linenr(term->vtz, (size_t)MAX(linenr - 1, 0));
+      }
+      // assert(linenr >= top_linenr);
+      row = (size_t)(linenr - top_linenr);
+      // WLOG("linenr=%d, top_linenr=%d, row=%zu", linenr, top_linenr, row);
+    }
+    fetch_rowz(term, row, width);
+
+    if (linenr <= buf->b_ml.ml_line_count) {
+      // WLOG("replacing row %zu linenr %d to value:'%s'", row, linenr, term->textbuf);
+      ml_replace_buf(buf, linenr, term->textbuf, true, false);
+      changed++;
+    } else {
+      // WLOG("appending row %zu linenr %d to value:'%s'", row, linenr, term->textbuf);
+      ml_append_buf(buf, linenr - 1, term->textbuf, 0, false);
+      added++;
+    }
+
+  }
+  // for (int linenr = term->invalid_start + 1; linenr < term->invalid_end + 1; linenr++) {
+  // }
   // for (size_t r = 0, linenr = top_linenr + 1;
   //      r < height; r++, linenr++) {
   // // for (int r = term->invalid_start, linenr = row_to_linenr(term, r);
   // //      r < term->invalid_end; r++, linenr++) {
   //   // WLOG("appending to buf: row=%zu, linenr=%zu", r, linenr);
-  //   fetch_rowz(term, r, width);
-  //   WLOG("setting line %zu to value:'%s'", linenr, term->textbuf);
+  //   fetch_lnum(term, r, width);
+  //   // WLOG("setting line %zu to value:'%s'", linenr, term->textbuf);
   //
   //   if ((linenr_T)linenr <= buf->b_ml.ml_line_count) {
   //     ml_replace_buf(buf, (linenr_T)linenr, term->textbuf, true, false);
@@ -2571,26 +2652,26 @@ static void refresh_screen(Terminal *term, buf_T *buf)
   //     added++;
   //   }
   // }
-  for (size_t linenr = 1; linenr <= total_rows; linenr++) {
-  // for (int r = term->invalid_start, linenr = row_to_linenr(term, r);
-  //      r < term->invalid_end; r++, linenr++) {
-    // WLOG("appending to buf: row=%zu, linenr=%zu", r, linenr);
-    fetch_lnum(term, linenr, width);
+  // for (size_t linenr = 1; linenr <= total_rows; linenr++) {
+  // // for (int r = term->invalid_start, linenr = row_to_linenr(term, r);
+  // //      r < term->invalid_end; r++, linenr++) {
+  //   // WLOG("appending to buf: row=%zu, linenr=%zu", r, linenr);
+  //   fetch_lnum(term, linenr, width);
+  //
+  //   if ((linenr_T)linenr <= buf->b_ml.ml_line_count) {
+  //     ml_replace_buf(buf, (linenr_T)linenr, term->textbuf, true, false);
+  //     changed++;
+  //   } else {
+  //     ml_append_buf(buf, (linenr_T)linenr - 1, term->textbuf, 0, false);
+  //     added++;
+  //   }
+  // }
 
-    if ((linenr_T)linenr <= buf->b_ml.ml_line_count) {
-      ml_replace_buf(buf, (linenr_T)linenr, term->textbuf, true, false);
-      changed++;
-    } else {
-      ml_append_buf(buf, (linenr_T)linenr - 1, term->textbuf, 0, false);
-      added++;
-    }
-  }
-
-  int change_start = (int)top_linenr; // row_to_linenr(term, term->invalid_start);
+  int change_start = term->invalid_start + 1; // row_to_linenr(term, term->invalid_start);
   int change_end = change_start + changed;
   changed_lines(buf, change_start, 0, change_end, added, true);
-  // term->invalid_start = INT_MAX;
-  // term->invalid_end = -1;
+  term->invalid_start = INT_MAX;
+  term->invalid_end = -1;
 }
 
 static void adjust_topline_cursor(Terminal *term, buf_T *buf, int added)

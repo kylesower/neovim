@@ -71,7 +71,7 @@ pub const Handler = struct {
     alloc: Allocator,
     /// The terminal state to modify.
     terminal: *Terminal,
-    callbacks: VTermZCallbacks = .{},
+    callbacks: c.VTermZCallbacks = .{},
     cbdata: ?*anyopaque = null,
     // Used to send data back to controlling terminal
     msg_writer: ?vterm.VTermMsgWriter = null,
@@ -281,6 +281,7 @@ pub const Handler = struct {
         const cursor_y_abs = self.terminal.screens.active.pages.total_rows - self.terminal.rows + cursor_y;
         if (cursor_x != cursor_init.x or cursor_y != cursor_init.y or cursor_y_abs != cursor_y_init_abs) {
             if (self.callbacks.movecursor) |movecursor| {
+                log.warn(@src(), "moving cursor to ({}, {})", .{ cursor_y_abs, cursor_x });
                 _ = movecursor(
                     cursor_y,
                     cursor_x,
@@ -288,6 +289,10 @@ pub const Handler = struct {
                     self.cbdata,
                 );
             }
+        }
+
+        if (self.callbacks.damage) |damage| {
+            _ = damage(cursor_init.y, cursor_y + 1, cursor_y_init_abs, cursor_y_abs + 1, self.cbdata);
         }
     }
 
@@ -471,18 +476,18 @@ pub const Handler = struct {
         };
 
         const cterminator = switch (terminator) {
-            .st => vterm.VTermZTerminator.VTERMZ_TERMINATOR_ST,
-            .bel => vterm.VTermZTerminator.VTERMZ_TERMINATOR_BEL,
+            .st => c.VTERMZ_TERMINATOR_ST,
+            .bel => c.VTERMZ_TERMINATOR_BEL,
         };
 
         var buf: [64]u8 = undefined;
         var bufw = std.Io.Writer.fixed(&buf);
 
-        var osc: VTermZOscColor = .{
+        var osc: c.VTermZOscColor = .{
             .command = command,
             .buf = &buf,
             .len = 0,
-            .terminator = cterminator,
+            .terminator = @intCast(cterminator),
         };
 
         var it = requests.constIterator(0);
@@ -887,45 +892,46 @@ pub const Handler = struct {
     }
 };
 
-pub const VTermZOscColor = extern struct {
-    command: c_int,
-    buf: [*]const u8,
-    len: usize = 0,
-    terminator: vterm.VTermZTerminator,
-};
-
-pub const VTermZCallbacks = extern struct {
-    // damage: ?*const fn (rect: VTermRect, user: *anyopaque) callconv(.c) c_int,
-    // moverect: ?*const fn (dest: VTermRect, src: VTermRect, user: *anyopaque) callconv(.c) c_int,
-    movecursor: ?*const fn (
-        row: c_int,
-        col: c_int,
-        row_abs: c_int,
-        user: ?*anyopaque,
-    ) callconv(.c) c_int = null,
-    // settermprop: ?*const fn (
-    //     prop: VTermProp,
-    //     val: *VTermValue,
-    //     user: ?*anyopaque,
-    // ) callconv(.c) c_int = null,
-    bell: ?*const fn (user: ?*anyopaque) callconv(.c) c_int = null,
-    theme: ?*const fn (dark: *bool, user: ?*anyopaque) callconv(.c) c_int = null,
-    osc_color: ?*const fn (osc: VTermZOscColor, user: ?*anyopaque) callconv(.c) c_int = null,
-    on_apc: ?*const fn (buf: [*]const u8, len: usize, user: ?*anyopaque) callconv(.c) c_int = null,
-    on_dcs: ?*const fn (buf: [*]const u8, len: usize, user: ?*anyopaque) callconv(.c) c_int = null,
-    cursor_style: ?*const fn (style: c.VTermZCursorStyle, user: ?*anyopaque) callconv(.c) c_int = null,
-    // sb_pushline: ?*const fn (
-    //     cols: c_int,
-    //     cells: [*]const VTermScreenCell,
-    //     user: *anyopaque,
-    // ) callconv(.c) c_int,
-    // sb_popline: ?*const fn (
-    //     cols: c_int,
-    //     cells: [*]VTermScreenCell,
-    //     user: *anyopaque,
-    // ) callconv(.c) c_int,
-    // sb_clear: ?*const fn (user: *anyopaque) callconv(.c) c_int,
-};
+// pub const VTermZOscColor = extern struct {
+//     command: c_int,
+//     buf: [*]const u8,
+//     len: usize = 0,
+//     terminator: vterm.VTermZTerminator,
+// };
+//
+// c.VTermZCallbacks
+// pub const VTermZCallbacks = extern struct {
+//     // moverect: ?*const fn (dest: VTermRect, src: VTermRect, user: *anyopaque) callconv(.c) c_int,
+//     movecursor: ?*const fn (
+//         row: usize,
+//         col: usize,
+//         row_abs: usize,
+//         user: ?*anyopaque,
+//     ) callconv(.c) c_int = null,
+//     // settermprop: ?*const fn (
+//     //     prop: VTermProp,
+//     //     val: *VTermValue,
+//     //     user: ?*anyopaque,
+//     // ) callconv(.c) c_int = null,
+//     damage: ?*const fn (start_row: usize, end_row: usize, start_lnum: usize, end_lnum: usize, user: ?*anyopaque) callconv(.c) c_int = null,
+//     bell: ?*const fn (user: ?*anyopaque) callconv(.c) c_int = null,
+//     theme: ?*const fn (dark: *bool, user: ?*anyopaque) callconv(.c) c_int = null,
+//     osc_color: ?*const fn (osc: VTermZOscColor, user: ?*anyopaque) callconv(.c) c_int = null,
+//     on_apc: ?*const fn (buf: [*]const u8, len: usize, user: ?*anyopaque) callconv(.c) c_int = null,
+//     on_dcs: ?*const fn (buf: [*]const u8, len: usize, user: ?*anyopaque) callconv(.c) c_int = null,
+//     cursor_style: ?*const fn (style: c.VTermZCursorStyle, user: ?*anyopaque) callconv(.c) c_int = null,
+//     // sb_pushline: ?*const fn (
+//     //     cols: c_int,
+//     //     cells: [*]const VTermScreenCell,
+//     //     user: *anyopaque,
+//     // ) callconv(.c) c_int,
+//     // sb_popline: ?*const fn (
+//     //     cols: c_int,
+//     //     cells: [*]VTermScreenCell,
+//     //     user: *anyopaque,
+//     // ) callconv(.c) c_int,
+//     // sb_clear: ?*const fn (user: *anyopaque) callconv(.c) c_int,
+// };
 
 // test "basic print" {
 //     var t: Terminal = try .init(testing.allocator, .{ .cols = 10, .rows = 10 });

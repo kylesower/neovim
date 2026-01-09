@@ -1846,7 +1846,7 @@ pub export fn vtermz_output_set_callback(
     vt.s.handler.msg_writer = msg_writer;
 }
 
-pub export fn vtermz_screen_set_callbacks(vt: *VTerm, callbacks: *const vterm_handler.VTermZCallbacks, user: *anyopaque) callconv(.c) void {
+pub export fn vtermz_screen_set_callbacks(vt: *VTerm, callbacks: *const c.VTermZCallbacks, user: *anyopaque) callconv(.c) void {
     vt.s.handler.callbacks = callbacks.*;
     vt.s.handler.cbdata = user;
 }
@@ -2075,8 +2075,8 @@ pub export fn vtermz_fill_buf_row_utf8(
     // log.warn(@src(), "filling buf row utf8 for row: {}", .{row});
     // vt.t.screens.active.pages.total_rows;
     // vt.t.screens.active.scroll(.{ .row = 7 });
-    const sb = vt.t.screens.active.pages.scrollbar();
-    log.warn(@src(), "fetching row {} with sb {any}", .{row, sb});
+    // const sb = vt.t.screens.active.pages.scrollbar();
+    // log.warn(@src(), "fetching row {} with sb {any}", .{ row, sb });
 
     const cell_row = vt.rs.row_data.items(.cells)[@intCast(row)];
     const end_col_clamped = @min(end_col, cell_row.len);
@@ -2132,10 +2132,6 @@ pub export fn vtermz_fill_buf_row_utf8(
         col_idx += width;
     }
 
-    if (row == 0) {
-      log.warn(@src(), "got row: {s}", .{buf[0..idx]});
-    }
-
     return idx;
 }
 
@@ -2153,25 +2149,25 @@ pub export fn vtermz_fill_buf_lnum_utf8(
         // log.warn(@src(), "lnum {} out of range. total rows: {}, start_col: {}, end_col: {}", .{lnum, vt.t.screens.active.pages.total_rows, start_col, end_col});
         return 0;
     }
-    log.warn(@src(), "getting lnum style for lnum={}", .{lnum});
+    // log.warn(@src(), "getting lnum style for lnum={}", .{lnum});
     // TODO: I'm not sure how to avoid this if the caller needs to request arbitrary
     // line numbers. Getting the scrollbar every time is potentially expensive.
     const sb = vt.t.screens.active.pages.scrollbar();
     const to_scroll = @as(isize, @intCast(lnum)) - @as(isize, @intCast(sb.offset));
-    log.warn(@src(), "sb: {any}, to_scroll={}", .{sb, to_scroll});
+    // log.warn(@src(), "sb: {any}, to_scroll={}", .{ sb, to_scroll });
     return if (to_scroll >= 0 and to_scroll < sb.len) blk: {
         // row is already in viewport
-        log.warn(@src(), "lnum exists at row {}, no scroll necessary", .{to_scroll});
+        // log.warn(@src(), "lnum exists at row {}, no scroll necessary", .{to_scroll});
         break :blk vtermz_fill_buf_row_utf8(vt, @intCast(to_scroll), start_col, end_col, buf, buf_max_len);
     } else blk: {
         // TODO: I'm not sure how to avoid this if the caller needs to request arbitrary
         // line numbers. This is terrible.
-        log.warn(@src(), "scrolling {}", .{to_scroll});
+        // log.warn(@src(), "scrolling {}", .{to_scroll});
         vt.t.scrollViewport(.{ .delta = to_scroll }) catch {};
         vtermz_refresh(vt);
         const res = vtermz_fill_buf_row_utf8(vt, 0, start_col, end_col, buf, buf_max_len);
-        vt.t.scrollViewport(.{ .delta = -to_scroll }) catch {};
-        vtermz_refresh(vt);
+        // vt.t.scrollViewport(.{ .delta = -to_scroll }) catch {};
+        // vtermz_refresh(vt);
         break :blk res;
     };
 }
@@ -2303,9 +2299,16 @@ pub export fn vtermz_state_set_palette_color(vt: *VTerm, index: u8, col: *const 
 
 pub export fn vtermz_scroll_linenr(vt: *VTerm, top_linenr: usize) callconv(.c) usize {
     const top = @min(top_linenr, vt.t.screens.active.pages.total_rows - vt.t.rows);
+    // log.warn(@src(), "scrolling to linenr: {}, actual={}", .{ top_linenr, top });
     vt.t.screens.active.scroll(.{ .row = top });
     vtermz_refresh(vt);
     return top;
+}
+
+pub export fn vtermz_scroll_top(vt: *VTerm) callconv(.c) usize {
+    vt.t.scrollViewport(.top) catch {};
+    vtermz_refresh(vt);
+    return 0;
 }
 
 pub export fn vtermz_scroll_bottom(vt: *VTerm) callconv(.c) usize {
@@ -2320,6 +2323,14 @@ pub export fn vtermz_top_linenr(vt: *VTerm) callconv(.c) usize {
 
 pub export fn vtermz_total_rows(vt: *VTerm) callconv(.c) usize {
     return vt.t.screens.active.pages.total_rows;
+}
+
+pub export fn vtermz_save_cursor(vt: *VTerm) callconv(.c) void {
+    vt.t.saveCursor();
+}
+
+pub export fn vtermz_restore_cursor(vt: *VTerm) callconv(.c) void {
+    vt.t.restoreCursor() catch {};
 }
 
 // // 263:        VTERM_TERMINATOR_BEL ? STATIC_CSTR_AS_OBJ("\x07") : STATIC_CSTR_AS_OBJ("\x1b\\"));
@@ -2573,4 +2584,73 @@ test "scrollback" {
     vtermz_refresh(vt);
     _ = vtermz_fill_buf_row_utf8(vt, 0, 0, 20, &out_buf, out_buf.len);
     try std.testing.expectEqualSlices(u8, rows[rows.len - vt.t.rows], out_buf[0..rows[rows.len - vt.t.rows].len]);
+}
+
+test "scrollback and dirty" {
+    const vt = vtermz_new(3, 20);
+    defer vtermz_free(vt);
+    var out_buf: [256]u8 = undefined;
+
+    const rows = [_][]const u8{
+        "ABC",
+        "DEF",
+        "GHI",
+        "JKL",
+        "MNO",
+        "PQR",
+        "STU",
+        "VWX",
+        "YZA",
+        "BCD",
+    };
+
+    for (rows, 0..) |row, idx| {
+        if (idx > 0) {
+            _ = vtermz_input_write(vt, "\r\n", 2);
+        }
+        _ = vtermz_input_write(vt, row.ptr, row.len);
+    }
+
+    vtermz_refresh(vt);
+    for (vt.rs.row_data.items(.dirty)) |*dirty| {
+      dirty.* = false;
+    }
+    for (vt.rs.row_data.items(.dirty)) |dirty| {
+      try std.testing.expect(!dirty);
+    }
+    _ = vtermz_scroll_bottom(vt);
+    _ = vtermz_scroll_top(vt);
+    // for (vt.rs.row_data.items(.dirty)) |dirty| {
+    //   try std.testing.expect(!dirty);
+    // }
+
+    _ = &out_buf;
+    // for (0..rows.len - vt.t.rows) |scroll_amount| {
+    //     for (rows[rows.len - vt.t.rows - scroll_amount .. rows.len - scroll_amount], 0..) |row, idx| {
+    //         _ = vtermz_fill_buf_row_utf8(vt, @intCast(idx), 0, 20, &out_buf, out_buf.len);
+    //         try std.testing.expectEqualSlices(u8, row, out_buf[0..row.len]);
+    //     }
+    //     try vt.t.scrollViewport(.{ .delta = -1 });
+    // }
+    //
+    // vt.t.screens.active.scroll(.{ .row = 100 });
+    // vtermz_refresh(vt);
+    // for (0..rows.len - vt.t.rows) |scroll_amount| {
+    //     vtermz_refresh(vt);
+    //     for (rows[rows.len - vt.t.rows - scroll_amount .. rows.len - scroll_amount], 0..) |row, idx| {
+    //         _ = vtermz_fill_buf_row_utf8(vt, @intCast(idx), 0, 20, &out_buf, out_buf.len);
+    //         try std.testing.expectEqualSlices(u8, row, out_buf[0..row.len]);
+    //     }
+    //     try vt.t.scrollViewport(.{ .delta = -1 });
+    // }
+    //
+    // vt.t.screens.active.scroll(.{ .row = 1 });
+    // vtermz_refresh(vt);
+    // _ = vtermz_fill_buf_row_utf8(vt, 0, 0, 20, &out_buf, out_buf.len);
+    // try std.testing.expectEqualSlices(u8, rows[1], out_buf[0..rows[1].len]);
+    //
+    // vt.t.screens.active.scroll(.{ .row = 100 });
+    // vtermz_refresh(vt);
+    // _ = vtermz_fill_buf_row_utf8(vt, 0, 0, 20, &out_buf, out_buf.len);
+    // try std.testing.expectEqualSlices(u8, rows[rows.len - vt.t.rows], out_buf[0..rows[rows.len - vt.t.rows].len]);
 }
