@@ -785,6 +785,7 @@ void terminal_check_size(Terminal *term)
   vterm_set_size(term->vt, height, width);
   vtermz_set_size(term->vtz, height, width);
   vterm_screen_flush_damage(term->vts);
+  vtermz_flush_damage(term->vtz);
   term->pending.resize = true;
   invalidate_terminal(term, -1, -1);
 }
@@ -1302,6 +1303,7 @@ void terminal_receive(Terminal *term, const char *data, size_t len)
     vtermz_input_write(term->vtz, data, len);
   }
   vterm_screen_flush_damage(term->vts);
+  vtermz_flush_damage(term->vtz);
 }
 
 static int get_rgb(VTermState *state, VTermColor color)
@@ -1555,10 +1557,13 @@ static int term_movecursorz(size_t row, size_t col, size_t row_abs, void *data)
   return 1;
 }
 
-static int term_damagez(size_t start_row, size_t end_row, size_t start_row_abs, size_t end_row_abs, void *data)
+// size_t damage_count = 0;
+static int term_damagez(int start_row_abs, int end_row_abs, void *data)
 {
+  // damage_count++;
+  // WLOG("damage_count=%zu", damage_count);
   // WLOG("term_damagzes: start_row_abs=%zu, end_row_abs=%zu", start_row_abs, end_row_abs);
-  invalidate_terminal(data, (int)start_row_abs, (int)end_row_abs);
+  invalidate_terminal(data, start_row_abs, end_row_abs);
   return 1;
 }
 
@@ -2320,6 +2325,7 @@ static bool fetch_cell(Terminal *term, int row, int col, VTermScreenCell *cell)
 // queue a terminal instance for refresh
 static void invalidate_terminal(Terminal *term, int start_row, int end_row)
 {
+  // WLOG("invalidating term from %d to %d", start_row, end_row);
   if (start_row != -1 && end_row != -1) {
     term->invalid_start = MIN(term->invalid_start, start_row);
     term->invalid_end = MAX(term->invalid_end, end_row);

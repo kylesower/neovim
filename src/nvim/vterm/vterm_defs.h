@@ -414,10 +414,9 @@ typedef struct {
 
 typedef struct {
   // TODO: do we need these other callbacks?
-  // int (*damage)(VTermRect rect, void *user);
   // int (*moverect)(VTermRect dest, VTermRect src, void *user);
   int (*movecursor)(size_t row, size_t col, size_t row_abs, void *user);
-  int (*damage)(size_t start_row, size_t end_row, size_t start_row_abs, size_t end_row_abs, void *user);
+  int (*damage)(int start_row_abs, int end_row_abs, void *user);
   // damage: ?*const fn (start_row: usize, end_row: usize, start_lnum: usize, end_lnum: usize, user: ?*anyopaque) callconv(.c) c_int = null,
   // int (*settermprop)(VTermProp prop, VTermValue *val, void *user);
   int (*bell)(void *user);
@@ -434,6 +433,7 @@ typedef struct {
 VTermZ *vtermz_new(uint16_t rows, uint16_t cols);
 void vtermz_screen_set_callbacks(VTermZ *vt, VTermZCallbacks *callbacks, void *user);
 void vtermz_free(VTermZ *vt);
+void vtermz_flush_damage(VTermZ *vt);
 void vtermz_print(VTermZ *vt);
 size_t vtermz_input_write(VTermZ *vt, const char *bytes, size_t len);
 void vtermz_set_utf8(VTermZ *vt, bool is_utf8);

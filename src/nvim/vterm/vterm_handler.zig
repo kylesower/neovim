@@ -79,6 +79,8 @@ pub const Handler = struct {
     // outdata: *anyopaque,
     dcs: DcsHandler,
     apc: ApcHandler,
+    damage_start: c_int = std.math.maxInt(c_int),
+    damage_end: c_int = -1,
 
     pub fn init(terminal: *Terminal, allocator: Allocator) Handler {
         return .{
@@ -291,8 +293,15 @@ pub const Handler = struct {
             }
         }
 
+        self.damage_start = @min(self.damage_start, @as(c_int, @intCast(cursor_y_init_abs)));
+        self.damage_end = @max(self.damage_end, @as(c_int, @intCast(cursor_y_abs + 1)));
+    }
+
+    pub fn flush_damage(self: *Handler) void {
         if (self.callbacks.damage) |damage| {
-            _ = damage(cursor_init.y, cursor_y + 1, cursor_y_init_abs, cursor_y_abs + 1, self.cbdata);
+            _ = damage(self.damage_start, self.damage_end, self.cbdata);
+            self.damage_start = std.math.maxInt(c_int);
+            self.damage_end = -1;
         }
     }
 

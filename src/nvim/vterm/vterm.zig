@@ -1804,6 +1804,10 @@ pub export fn vtermz_refresh(vt: *VTerm) callconv(.c) void {
     vt.rs.update(vt.allocator, vt.t) catch preserve_exit(e_outofmem);
 }
 
+pub export fn vtermz_flush_damage(vt: *VTerm) callconv(.c) void {
+  vt.s.handler.flush_damage();
+}
+
 pub export fn vtermz_teardown() callconv(.c) void {
     _ = gpa.deinit();
 }
