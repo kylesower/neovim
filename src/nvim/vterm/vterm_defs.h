@@ -420,7 +420,7 @@ typedef struct {
   // damage: ?*const fn (start_row: usize, end_row: usize, start_lnum: usize, end_lnum: usize, user: ?*anyopaque) callconv(.c) c_int = null,
   // int (*settermprop)(VTermProp prop, VTermValue *val, void *user);
   int (*bell)(void *user);
-  int (*theme)(bool *dark, void *user);
+  int (*theme_request)(bool *dark, void *user);
   int (*osc_color)(VTermZOscColor osc, void *user);
   int (*on_apc)(const char *buf, size_t len, void *user);
   int (*on_dcs)(const char *buf, size_t len, void *user);

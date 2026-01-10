@@ -696,7 +696,13 @@ pub const Handler = struct {
             },
 
             // TODO: write msg
-            .color_scheme => {}, // self.surfaceMessageWriter(.{ .report_color_scheme = true }),
+            .color_scheme => if (self.callbacks.theme_request) |theme_request| {
+                var dark: bool = true;
+                _ = theme_request(&dark, self.cbdata);
+                var theme_buf: [32]u8 = undefined;
+                const msg = try std.fmt.bufPrint(&theme_buf, "\x1b[?997;{}n", .{if (dark) @as(u2, 1) else @as(u2, 2)});
+                self.term_send(msg);
+            },
         }
     }
 

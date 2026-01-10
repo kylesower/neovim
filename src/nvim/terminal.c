@@ -235,7 +235,7 @@ static VTermZCallbacks vtermz_screen_callbacks = {
   .damage = term_damagez,
   // .settermprop = term_settermprop,
   .bell = term_bell,
-  .theme = term_theme,
+  .theme_request = term_theme,
   .osc_color = on_osc_color,
   // .on_dcs = on_dcsz,
   .on_apc = on_apcz,
@@ -1304,11 +1304,12 @@ void terminal_receive(Terminal *term, const char *data, size_t len)
       kv_push(crlf_data, data[i]);
     }
 
-    vterm_input_write(term->vt, crlf_data.items, kv_size(crlf_data));
+    // TODO: ifdef VTERM_GHOSTTY
+    // vterm_input_write(term->vt, crlf_data.items, kv_size(crlf_data));
     vtermz_input_write(term->vtz, crlf_data.items, kv_size(crlf_data));
     kv_destroy(crlf_data);
   } else {
-    vterm_input_write(term->vt, data, len);
+    // vterm_input_write(term->vt, data, len);
     vtermz_input_write(term->vtz, data, len);
   }
   vterm_screen_flush_damage(term->vts);
