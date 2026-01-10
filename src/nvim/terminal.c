@@ -243,10 +243,16 @@ static VTermZCallbacks vtermz_screen_callbacks = {
   .set_title = term_set_title,
   .report_color_scheme = term_report_color_scheme,
   .forward_mouse = term_forward_mouse,
+  .set_clipboard = on_clipboard_set,
 };
 
+// static VTermSelectionCallbacks vterm_selection_callbacks = {
+//   .set = term_selection_set,
+//   // For security reasons we don't support querying the system clipboard from the embedded terminal
+//   .query = NULL,
+// };
 static VTermSelectionCallbacks vterm_selection_callbacks = {
-  .set = term_selection_set,
+  .set = NULL,
   // For security reasons we don't support querying the system clipboard from the embedded terminal
   .query = NULL,
 };
@@ -1787,6 +1793,23 @@ static int term_sb_pop(int cols, VTermScreenCell *cells, void *data)
   return 1;
 }
 
+static void term_clipboard_set_register(void **argv) {
+  char regname = (char)(uintptr_t)argv[0];
+  char *data = argv[1];
+
+  list_T *lines = tv_list_alloc(1);
+  tv_list_append_allocated_string(lines, data);
+
+  list_T *args = tv_list_alloc(3);
+  tv_list_append_list(args, lines);
+
+  const char regtype = 'v';
+  tv_list_append_string(args, &regtype, 1);
+
+  tv_list_append_string(args, &regname, 1);
+  eval_call_provider("clipboard", "set", args, true);
+}
+
 static void term_clipboard_set(void **argv)
 {
   VTermSelectionMask mask = (VTermSelectionMask)(long)argv[0];
@@ -1832,6 +1855,25 @@ static int term_selection_set(VTermSelectionMask mask, VTermStringFragment frag,
     multiqueue_put(main_loop.events, term_clipboard_set, (void *)mask, data);
   }
 
+  return 1;
+}
+
+static int on_clipboard_set(char kind, const char *data, size_t len, void *user)
+{
+  char *data_owned = xmemdupz(data, len);
+  char regname;
+  switch (kind) {
+    case 'c': 
+      regname = '+';
+      break;
+    case 'p':
+      regname = '*';
+      break;
+    default:
+      regname = '+';
+      break;
+  }
+  multiqueue_put(main_loop.events, term_clipboard_set_register, (void *)(uintptr_t)regname, data_owned);
   return 1;
 }
 

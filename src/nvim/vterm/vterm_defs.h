@@ -435,6 +435,7 @@ typedef struct {
   int (*cursor_style)(VTermZCursorStyle style, void *user);
   int (*report_color_scheme)(bool enabled, void *user);
   int (*forward_mouse)(VTermZMouseForwardType forward_type, void *user);
+  int (*set_clipboard)(char clipboard_kind, const char *data, size_t len, void *user);
   // int (*sb_pushline)(int cols, const VTermScreenCell *cells, void *user);
   // int (*sb_popline)(int cols, VTermScreenCell *cells, void *user);
   // int (*sb_clear)(void *user);

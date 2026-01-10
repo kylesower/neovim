@@ -49,6 +49,10 @@ const kitty_color = ghostty_vt.kitty.color;
 // const Terminal = @import("Terminal.zig");
 const Terminal = ghostty_vt.Terminal;
 const Allocator = std.mem.Allocator;
+const b64decoder = std.base64.Base64Decoder.init(
+    std.base64.standard.alphabet_chars,
+    std.base64.standard.pad_char,
+);
 
 /// This is a Stream implementation that processes actions against
 /// a Terminal and updates the Terminal state. It is called "readonly" because
@@ -269,6 +273,7 @@ pub const Handler = struct {
                     _ = set_title(value.title.ptr, value.title.len, self.cbdata);
                 }
             },
+            .clipboard_contents => try self.clipboard(value),
             .enquiry,
             .size_report,
             .xtversion,
@@ -276,7 +281,6 @@ pub const Handler = struct {
             .report_pwd,
             .show_desktop_notification,
             .progress_report,
-            .clipboard_contents,
             .title_push,
             .title_pop,
             => {},
@@ -317,6 +321,19 @@ pub const Handler = struct {
                 .any => c.VTERMZ_MOUSE_FORWARD_ANY,
                 else => return,
             }, self.cbdata);
+        }
+    }
+
+    pub fn clipboard(self: *Handler, value: Action.Value(.clipboard_contents)) !void {
+        if (self.callbacks.set_clipboard) |set_clipboard| {
+            if (value.data.len > 0 and value.data[0] == '?') {
+                return;
+            }
+            const size = try b64decoder.calcSizeForSlice(value.data);
+            const data = try self.alloc.alloc(u8, size);
+            defer self.alloc.free(data);
+            try b64decoder.decode(data, value.data);
+            _ = set_clipboard(value.kind, data.ptr, data.len, self.cbdata);
         }
     }
 
