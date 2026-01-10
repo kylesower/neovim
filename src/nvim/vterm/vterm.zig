@@ -1774,6 +1774,8 @@ pub export fn vtermz_new(rows: u16, cols: u16) callconv(.c) *VTerm {
         .rows = @intCast(rows),
         .cols = @intCast(cols),
         .default_modes = t_modes.values,
+        // Let nvim handle the scrollback if it gets out of hand
+        .max_scrollback = std.math.maxInt(usize),
     }) catch preserve_exit(e_outofmem);
 
     const rs: ghostty_vt.RenderState = .empty;
@@ -1805,7 +1807,7 @@ pub export fn vtermz_refresh(vt: *VTerm) callconv(.c) void {
 }
 
 pub export fn vtermz_flush_damage(vt: *VTerm) callconv(.c) void {
-  vt.s.handler.flush_damage();
+    vt.s.handler.flush_damage();
 }
 
 pub export fn vtermz_teardown() callconv(.c) void {
@@ -2617,10 +2619,10 @@ test "scrollback and dirty" {
 
     vtermz_refresh(vt);
     for (vt.rs.row_data.items(.dirty)) |*dirty| {
-      dirty.* = false;
+        dirty.* = false;
     }
     for (vt.rs.row_data.items(.dirty)) |dirty| {
-      try std.testing.expect(!dirty);
+        try std.testing.expect(!dirty);
     }
     _ = vtermz_scroll_bottom(vt);
     _ = vtermz_scroll_top(vt);

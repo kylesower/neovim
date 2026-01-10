@@ -283,7 +283,6 @@ pub const Handler = struct {
         const cursor_y_abs = self.terminal.screens.active.pages.total_rows - self.terminal.rows + cursor_y;
         if (cursor_x != cursor_init.x or cursor_y != cursor_init.y or cursor_y_abs != cursor_y_init_abs) {
             if (self.callbacks.movecursor) |movecursor| {
-                log.warn(@src(), "moving cursor to ({}, {})", .{ cursor_y_abs, cursor_x });
                 _ = movecursor(
                     cursor_y,
                     cursor_x,
