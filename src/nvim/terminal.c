@@ -1499,14 +1499,14 @@ void terminal_get_line_attributes(Terminal *term, win_T *wp, int linenr, int *te
       });
     }
 
-    if (style.uri_len > 0) {
-      // TODO: make this more efficient
-      char *uri = xmemdupz(style.uri, style.uri_len);
-      int uri_attr_id = hl_add_url(0, uri);
-      // WLOG("got hyperlink (%d, %zu), attr_id=%d: '%s'", linenr, col, uri_attr_id, uri);
-      attr_id = hl_combine_attr(attr_id, uri_attr_id);
-      XFREE_CLEAR(uri);
-    }
+    // if (style.uri_len > 0) {
+    //   // TODO: make this more efficient
+    //   char *uri = xmemdupz(style.uri, style.uri_len);
+    //   int uri_attr_id = hl_add_url(0, uri);
+    //   // WLOG("got hyperlink (%d, %zu), attr_id=%d: '%s'", linenr, col, uri_attr_id, uri);
+    //   attr_id = hl_combine_attr(attr_id, uri_attr_id);
+    //   XFREE_CLEAR(uri);
+    // }
 
     term_attrs[col] = attr_id;
   }
@@ -2433,6 +2433,7 @@ static void refresh_terminal(Terminal *term)
   vtermz_refresh(term->vtz);
   refresh_size(term, buf);
   refresh_scrollback(term, buf);
+  adjust_scrollbackz(term, buf);
   refresh_screen(term, buf);
 
   int ml_added = buf->b_ml.ml_line_count - ml_before;
@@ -2564,6 +2565,35 @@ static void adjust_scrollback(Terminal *term, buf_T *buf)
   term->sb_size = scbk;
 }
 
+/// Adjusts scrollback storage and the terminal buffer scrollback lines
+static void adjust_scrollbackz(Terminal *term, buf_T *buf)
+{
+  if (buf->b_p_scbk < 1) {  // Local 'scrollback' was set to -1.
+    buf->b_p_scbk = SB_MAX;
+  }
+  const size_t scbk = (size_t)buf->b_p_scbk;
+
+  vtermz_refresh(term->vtz);
+  uint16_t height;
+  uint16_t width;
+  vtermz_get_size(term->vtz, &height, &width);
+  size_t term_scrollback = vtermz_total_rows(term->vtz) - height;
+
+  if (scbk < term_scrollback) {
+    size_t diff = term_scrollback - scbk;
+    vtermz_delete_from_scrollback(term->vtz, diff);
+    term->invalid_start = MAX(0, term->invalid_start - (int)diff);
+    term->invalid_end = MAX(0, term->invalid_end - (int)diff);
+    vtermz_refresh(term->vtz);
+    for (size_t i = 0; i < diff; i++) {
+      ml_delete_buf(buf, 1, false);
+    }
+    mark_adjust_buf(buf, 1, (linenr_T)diff, MAXLNUM, -(linenr_T)diff, true,
+                    kMarkAdjustTerm, kExtmarkUndo);
+    deleted_lines_buf(buf, 1, (linenr_T)diff);
+  }
+}
+
 // Refresh the scrollback of an invalidated terminal.
 static void refresh_scrollback(Terminal *term, buf_T *buf)
 {
@@ -2668,14 +2698,17 @@ static void refresh_screen(Terminal *term, buf_T *buf)
   //   }
   // }
   // Terminal height may have decreased before `invalid_end` reflects it.
-  // term->invalid_end = MIN(term->invalid_end, height);
+  size_t total_rows = vtermz_total_rows(term->vtz);
+  term->invalid_end = MIN(term->invalid_end, (int)total_rows);
 
+  // WLOG("refresh_screen invalid_start=%d, invalid_end=%d", term->invalid_start, term->invalid_end);
   // // There are no invalid rows.
   if (term->invalid_start >= term->invalid_end) {
     term->invalid_start = INT_MAX;
     term->invalid_end = -1;
     return;
   }
+
 
   // int new_line_count = vtermz_get_new_line_count(term->vtz);
   // int new_line_count = 41;
@@ -2703,16 +2736,13 @@ static void refresh_screen(Terminal *term, buf_T *buf)
       }
       // assert(linenr >= top_linenr);
       row = (size_t)(linenr - top_linenr);
-      // WLOG("linenr=%d, top_linenr=%d, row=%zu", linenr, top_linenr, row);
     }
     fetch_rowz(term, row, width);
 
     if (linenr <= buf->b_ml.ml_line_count) {
-      // WLOG("replacing row %zu linenr %d to value:'%s'", row, linenr, term->textbuf);
       ml_replace_buf(buf, linenr, term->textbuf, true, false);
       changed++;
     } else {
-      // WLOG("appending row %zu linenr %d to value:'%s'", row, linenr, term->textbuf);
       ml_append_buf(buf, linenr - 1, term->textbuf, 0, false);
       added++;
     }

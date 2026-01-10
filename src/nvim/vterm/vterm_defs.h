@@ -499,3 +499,4 @@ void vtermz_save_cursor(VTermZ *vt);
 void vtermz_restore_cursor(VTermZ *vt);
 void vtermz_start_paste(VTermZ *vt);
 void vtermz_end_paste(VTermZ *vt);
+size_t vtermz_delete_from_scrollback(VTermZ *vt, size_t count);

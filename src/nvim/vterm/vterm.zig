@@ -2370,16 +2370,25 @@ pub export fn vtermz_restore_cursor(vt: *VTerm) callconv(.c) void {
 
 pub export fn vtermz_start_paste(vt: *VTerm) callconv(.c) void {
     if (vt.t.modes.get(.bracketed_paste)) {
-        log.warn(@src(), "starting paste", .{});
         vt.term_send("\x1b[200~");
     }
 }
 
 pub export fn vtermz_end_paste(vt: *VTerm) callconv(.c) void {
     if (vt.t.modes.get(.bracketed_paste)) {
-        log.warn(@src(), "ending paste", .{});
         vt.term_send("\x1b[201~");
     }
+}
+
+pub export fn vtermz_delete_from_scrollback(vt: *VTerm, count: usize) callconv(.c) usize {
+    const sb_rows = vtermz_total_rows(vt) - vt.t.rows;
+    const to_delete = @min(sb_rows, count);
+    if (to_delete == 0) return 0;
+    vt.t.screens.active.eraseRows(
+        .{ .history = .{ .x = 0, .y = 0 } },
+        .{ .history = .{ .x = 0, .y = @intCast(to_delete - 1) } },
+    );
+    return to_delete;
 }
 
 // // 263:        VTERM_TERMINATOR_BEL ? STATIC_CSTR_AS_OBJ("\x07") : STATIC_CSTR_AS_OBJ("\x1b\\"));
@@ -2702,4 +2711,16 @@ test "scrollback and dirty" {
     // vtermz_refresh(vt);
     // _ = vtermz_fill_buf_row_utf8(vt, 0, 0, 20, &out_buf, out_buf.len);
     // try std.testing.expectEqualSlices(u8, rows[rows.len - vt.t.rows], out_buf[0..rows[rows.len - vt.t.rows].len]);
+}
+
+test "delete from scrollback" {
+    const vt = vtermz_new(5, 20);
+    defer vtermz_free(vt);
+
+    for (0..20) |idx| {
+        var line_buf: [10]u8 = undefined;
+        const buf = try std.fmt.bufPrint(&line_buf, "{}\r\n", .{idx});
+        _ = vtermz_input_write(vt, buf.ptr, buf.len);
+    }
+    // TODO: write test for deleting scrollback
 }
