@@ -391,9 +391,26 @@ pub const Handler = struct {
                 self.terminal.scrolling_region.right = self.terminal.cols - 1;
             },
 
-            .alt_screen_legacy => try self.terminal.switchScreenMode(.@"47", enabled),
-            .alt_screen => try self.terminal.switchScreenMode(.@"1047", enabled),
-            .alt_screen_save_cursor_clear_enter => try self.terminal.switchScreenMode(.@"1049", enabled),
+            .alt_screen_legacy, .alt_screen, .alt_screen_save_cursor_clear_enter => {
+                const screen_mode: Terminal.SwitchScreenMode = switch (mode) {
+                    .alt_screen_legacy => .@"47",
+                    .alt_screen => .@"1047",
+                    .alt_screen_save_cursor_clear_enter => .@"1049",
+                    else => .@"1047",
+                };
+                const total_rows = self.terminal.screens.active.pages.total_rows;
+                const skey_init = self.terminal.screens.active_key;
+                try self.terminal.switchScreenMode(screen_mode, enabled);
+
+                // Because the terminal only has a single buffer, it puts the primary
+                // and alt screens in the same buffer. When we swap between the two,
+                // we need to damage where the opposite screen was.
+                if (self.terminal.screens.active_key != skey_init) {
+                    self.damage_start = 0;
+                    const dmg_max = @max(total_rows, self.damage_end);
+                    self.damage_end = @intCast(@min(self.terminal.screens.active.pages.total_rows, dmg_max));
+                }
+            },
 
             .cursor_visible => {
                 if (self.callbacks.cursor_style) |cursor_style| {
