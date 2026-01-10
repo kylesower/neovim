@@ -1807,7 +1807,7 @@ pub export fn vtermz_refresh(vt: *VTerm) callconv(.c) void {
 }
 
 pub export fn vtermz_flush_damage(vt: *VTerm) callconv(.c) void {
-    vt.s.handler.flush_damage();
+    vt.s.handler.flushDamage();
 }
 
 pub export fn vtermz_teardown() callconv(.c) void {

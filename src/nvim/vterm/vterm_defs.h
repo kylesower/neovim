@@ -412,6 +412,13 @@ typedef struct {
   VTermZCursorShape shape;
 } VTermZCursorStyle;
 
+typedef enum {
+  VTERMZ_MOUSE_FORWARD_NONE,
+  VTERMZ_MOUSE_FORWARD_NORMAL,
+  VTERMZ_MOUSE_FORWARD_BUTTON,
+  VTERMZ_MOUSE_FORWARD_ANY,
+} VTermZMouseForwardType;
+
 typedef struct {
   // TODO: do we need these other callbacks?
   // int (*moverect)(VTermRect dest, VTermRect src, void *user);
@@ -427,6 +434,7 @@ typedef struct {
   int (*set_title)(const char *title, size_t len, void *user);
   int (*cursor_style)(VTermZCursorStyle style, void *user);
   int (*report_color_scheme)(bool enabled, void *user);
+  int (*forward_mouse)(VTermZMouseForwardType forward_type, void *user);
   // int (*sb_pushline)(int cols, const VTermScreenCell *cells, void *user);
   // int (*sb_popline)(int cols, VTermScreenCell *cells, void *user);
   // int (*sb_clear)(void *user);

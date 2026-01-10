@@ -300,11 +300,23 @@ pub const Handler = struct {
         self.damage_end = @max(self.damage_end, @as(c_int, @intCast(cursor_y_abs + 1)));
     }
 
-    pub fn flush_damage(self: *Handler) void {
+    pub inline fn flushDamage(self: *Handler) void {
         if (self.callbacks.damage) |damage| {
             _ = damage(self.damage_start, self.damage_end, self.cbdata);
             self.damage_start = std.math.maxInt(c_int);
             self.damage_end = -1;
+        }
+    }
+
+    pub inline fn cbForwardMouse(self: *Handler) void {
+        if (self.callbacks.forward_mouse) |forward_mouse| {
+            _ = forward_mouse(switch (self.terminal.flags.mouse_event) {
+                .none => c.VTERMZ_MOUSE_FORWARD_NONE,
+                .normal => c.VTERMZ_MOUSE_FORWARD_NORMAL,
+                .button => c.VTERMZ_MOUSE_FORWARD_BUTTON,
+                .any => c.VTERMZ_MOUSE_FORWARD_ANY,
+                else => return,
+            }, self.cbdata);
         }
     }
 
@@ -397,6 +409,7 @@ pub const Handler = struct {
                 } else {
                     self.terminal.flags.mouse_event = .none;
                 }
+                self.cbForwardMouse();
             },
             .mouse_event_button => {
                 if (enabled) {
@@ -404,6 +417,7 @@ pub const Handler = struct {
                 } else {
                     self.terminal.flags.mouse_event = .none;
                 }
+                self.cbForwardMouse();
             },
             .mouse_event_any => {
                 if (enabled) {
@@ -411,6 +425,7 @@ pub const Handler = struct {
                 } else {
                     self.terminal.flags.mouse_event = .none;
                 }
+                self.cbForwardMouse();
             },
 
             .mouse_format_utf8 => self.terminal.flags.mouse_format = if (enabled) .utf8 else .x10,
