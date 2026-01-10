@@ -1238,7 +1238,9 @@ void terminal_paste(int count, String *y_array, size_t y_size)
   if (y_size == 0) {
     return;
   }
-  vterm_keyboard_start_paste(curbuf->terminal->vt);
+  // TODO: ifdef
+  // vterm_keyboard_start_paste(curbuf->terminal->vt);
+  vtermz_start_paste(curbuf->terminal->vtz);
   size_t buff_len = y_array[0].size;
   char *buff = xmalloc(buff_len);
   for (int i = 0; i < count; i++) {
@@ -1272,7 +1274,8 @@ void terminal_paste(int count, String *y_array, size_t y_size)
     }
   }
   xfree(buff);
-  vterm_keyboard_end_paste(curbuf->terminal->vt);
+  // vterm_keyboard_end_paste(curbuf->terminal->vt);
+  vtermz_end_paste(curbuf->terminal->vtz);
 }
 
 static void terminal_send_key(Terminal *term, int c)

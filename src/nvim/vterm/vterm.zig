@@ -2368,6 +2368,20 @@ pub export fn vtermz_restore_cursor(vt: *VTerm) callconv(.c) void {
     vt.t.restoreCursor() catch {};
 }
 
+pub export fn vtermz_start_paste(vt: *VTerm) callconv(.c) void {
+    if (vt.t.modes.get(.bracketed_paste)) {
+        log.warn(@src(), "starting paste", .{});
+        vt.term_send("\x1b[200~");
+    }
+}
+
+pub export fn vtermz_end_paste(vt: *VTerm) callconv(.c) void {
+    if (vt.t.modes.get(.bracketed_paste)) {
+        log.warn(@src(), "ending paste", .{});
+        vt.term_send("\x1b[201~");
+    }
+}
+
 // // 263:        VTERM_TERMINATOR_BEL ? STATIC_CSTR_AS_OBJ("\x07") : STATIC_CSTR_AS_OBJ("\x1b\\"));
 // // 354:        VTermState *state = vterm_obtain_state(term->vt);
 // // 356:        vterm_state_set_penattr(state, VTERM_ATTR_URI, VTERM_VALUETYPE_INT, &value);

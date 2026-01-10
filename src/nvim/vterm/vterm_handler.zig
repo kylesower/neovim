@@ -173,6 +173,9 @@ pub const Handler = struct {
                     );
                 }
             },
+            // TODO: handle damage for all these erase things. For instance, ^C uses
+            // erase_display_below, which doesn't move the cursor down, thus the damage
+            // based on cursor calculations is incorrect.
             .erase_display_below => self.terminal.eraseDisplay(.below, value),
             .erase_display_above => self.terminal.eraseDisplay(.above, value),
             .erase_display_complete => self.terminal.eraseDisplay(.complete, value),
@@ -212,9 +215,7 @@ pub const Handler = struct {
                 }
             },
             .save_cursor => self.terminal.saveCursor(),
-            .restore_cursor => {
-                try self.terminal.restoreCursor();
-            },
+            .restore_cursor => try self.terminal.restoreCursor(),
             .invoke_charset => self.terminal.invokeCharset(value.bank, value.charset, value.locking),
             .configure_charset => self.terminal.configureCharset(value.slot, value.charset),
             .set_attribute => switch (value) {
@@ -289,10 +290,10 @@ pub const Handler = struct {
                 }
             },
             .clipboard_contents => try self.clipboard(value),
+            .kitty_keyboard_query,
             .enquiry,
             .size_report,
             .xtversion,
-            .kitty_keyboard_query,
             .report_pwd,
             .show_desktop_notification,
             .progress_report,
@@ -315,8 +316,11 @@ pub const Handler = struct {
             }
         }
 
-        self.damage_start = @min(self.damage_start, @as(c_int, @intCast(cursor_y_init_abs)));
-        self.damage_end = @max(self.damage_end, @as(c_int, @intCast(cursor_y_abs + 1)));
+        const lo: c_int = @intCast(@min(cursor_y_init_abs, cursor_y_abs));
+        const hi: c_int = @intCast(@max(cursor_y_init_abs, cursor_y_abs));
+        self.damage_start = @min(self.damage_start, @as(c_int, lo));
+        self.damage_end = @max(self.damage_end, @as(c_int, hi + 1));
+        // log.warn(@src(), "action={}, lo={}, hi={}", .{ action, lo, hi });
     }
 
     pub inline fn flushDamage(self: *Handler) void {
@@ -746,7 +750,6 @@ pub const Handler = struct {
                 _ = bufw.consumeAll();
             },
 
-            // TODO: write msg
             .color_scheme => if (self.callbacks.theme_request) |theme_request| {
                 var dark: bool = true;
                 _ = theme_request(&dark, self.cbdata);
@@ -776,6 +779,7 @@ pub const Handler = struct {
     }
 
     fn dcsCommand(self: *Handler, cmd: *ghostty_vt.dcs.Command) !void {
+        // TODO: call fallback?
         switch (cmd.*) {
             .tmux => {},
             // .tmux => |tmux| tmux: {
@@ -848,6 +852,7 @@ pub const Handler = struct {
             // },
 
             .xtgettcap => |*gettcap| {
+                // log.warn(@src(), "got xtgettcap query: '{s}' ({any})", .{ gettcap.data.written(), gettcap.data.written() });
                 _ = gettcap;
                 // TODO: see if I can get this out of ghostty_vt. Right now it doesn't
                 // seem to be exposed.

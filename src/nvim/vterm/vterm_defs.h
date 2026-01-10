@@ -497,3 +497,5 @@ size_t vtermz_top_linenr(VTermZ *vt);
 size_t vtermz_total_rows(VTermZ *vt);
 void vtermz_save_cursor(VTermZ *vt);
 void vtermz_restore_cursor(VTermZ *vt);
+void vtermz_start_paste(VTermZ *vt);
+void vtermz_end_paste(VTermZ *vt);
