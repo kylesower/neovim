@@ -260,15 +260,19 @@ pub const Handler = struct {
 
             // Have no terminal-modifying effect
             .bell => _ = if (self.callbacks.bell) |bell| bell(self.cbdata),
-            .device_attributes => {},
+            .device_attributes => try self.deviceAttributes(value),
             .device_status => try self.deviceStatusReport(value.request),
             .request_mode => try self.requestMode(value.mode),
             .request_mode_unknown => try self.requestModeUnknown(value.mode, value.ansi),
+            .window_title => {
+                if (self.callbacks.set_title) |set_title| {
+                    _ = set_title(value.title.ptr, value.title.len, self.cbdata);
+                }
+            },
             .enquiry,
             .size_report,
             .xtversion,
             .kitty_keyboard_query,
-            .window_title,
             .report_pwd,
             .show_desktop_notification,
             .progress_report,
@@ -418,7 +422,7 @@ pub const Handler = struct {
         }
     }
 
-    // I think libvterm doesn't actually support this.
+    // I think libvterm doesn't support this.
     fn requestMode(self: *Handler, mode: ghostty_vt.modes.Mode) !void {
         const tag: ghostty_vt.modes.ModeTag = @bitCast(@intFromEnum(mode));
         const code: u8 = if (self.terminal.modes.get(mode)) 1 else 2;
@@ -660,7 +664,7 @@ pub const Handler = struct {
             //     "\x1B[?62;22c",
             .primary => self.term_send("\x1B[?62;22;52c"),
             .secondary => self.term_send("\x1B[>1;10;0c"),
-            else => log.warn_scoped(@src(), .vterm_handler, "unimplemented device attributes req: {}", .{req}),
+            else => log.warn(@src(), "unimplemented device attributes req: {}", .{req}),
         }
     }
 

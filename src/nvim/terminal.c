@@ -237,9 +237,10 @@ static VTermZCallbacks vtermz_screen_callbacks = {
   .bell = term_bell,
   .theme = term_theme,
   .osc_color = on_osc_color,
+  // .on_dcs = on_dcsz,
   .on_apc = on_apcz,
   .cursor_style = term_cursor_style,
-  // .on_dcs = on_dcsz,
+  .set_title = term_set_title,
 };
 
 static VTermSelectionCallbacks vterm_selection_callbacks = {
@@ -461,6 +462,12 @@ static int term_cursor_style(VTermZCursorStyle style, void *user) {
 
   invalidate_terminal(term, -1, -1);
   return 1;
+}
+
+static int term_set_title(const char *title, size_t len, void *user) {
+  Terminal *term = user;
+  buf_T *buf = handle_get_buffer(term->buf_handle);
+  buf_set_term_title(buf, title, len);
 }
 
 static int on_apc(VTermStringFragment frag, void *user)
@@ -950,6 +957,8 @@ bool terminal_enter(void)
 static void terminal_check_cursor(void)
 {
   Terminal *term = curbuf->terminal;
+  // TODO: I think this works by chance because we set cursor to an absolute value, but
+  // should remove row_to_linenr.
   curwin->w_cursor.lnum = MIN(curbuf->b_ml.ml_line_count,
                               row_to_linenr(term, term->cursor.row));
   const linenr_T topline = MAX(curbuf->b_ml.ml_line_count - curwin->w_view_height + 1, 1);

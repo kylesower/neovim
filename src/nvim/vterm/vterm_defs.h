@@ -424,6 +424,7 @@ typedef struct {
   int (*osc_color)(VTermZOscColor osc, void *user);
   int (*on_apc)(const char *buf, size_t len, void *user);
   int (*on_dcs)(const char *buf, size_t len, void *user);
+  int (*set_title)(const char *title, size_t len, void *user);
   int (*cursor_style)(VTermZCursorStyle style, void *user);
   // int (*sb_pushline)(int cols, const VTermScreenCell *cells, void *user);
   // int (*sb_popline)(int cols, VTermScreenCell *cells, void *user);
