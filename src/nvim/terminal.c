@@ -2658,48 +2658,24 @@ static void refresh_screen(Terminal *term, buf_T *buf)
   uint16_t width;
   // vterm_get_size(term->vt, &height, &width);
   vtermz_get_size(term->vtz, &height, &width);
-  // WLOG("refresh_screen invalid start=%d, invalid_end=%d", term->invalid_start, term->invalid_end);
-  // size_t total_rows = vtermz_total_rows(term->vtz);
-  // FOR_ALL_TAB_WINDOWS(tp, wp) {
-  //   if (wp->w_buffer == buf) {
-  //     size_t topline = (size_t)wp->w_topline;
-  //     WLOG("topline: %zu", topline);
-  //     // size_t botline = (size_t)wp->w_botline;
-  //     vtermz_save_cursor(term->vtz);
-  //     size_t vt_topline = vtermz_scroll_linenr(term->vtz, topline - 1);
-  //     for (size_t row = 0, linenr = vt_topline + 1; row < height; row++, linenr++) {
-  //       fetch_rowz(term, row, width);
-  //
-  //       if ((linenr_T)linenr <= buf->b_ml.ml_line_count) {
-  //         ml_replace_buf(buf, (linenr_T)linenr, term->textbuf, true, false);
-  //         changed++;
-  //       } else {
-  //         ml_append_buf(buf, (linenr_T)linenr - 1, term->textbuf, 0, false);
-  //         added++;
-  //       }
-  //     }
-  //     size_t vt_newtop = vtermz_scroll_linenr(term->vtz, (size_t)wp->w_botline);
-  //     for (size_t row = 0, linenr = vt_newtop + 1; row < height; row++, linenr++) {
-  //       fetch_rowz(term, row, width);
-  //
-  //       if ((linenr_T)linenr <= buf->b_ml.ml_line_count) {
-  //         ml_replace_buf(buf, (linenr_T)linenr, term->textbuf, true, false);
-  //         changed++;
-  //       } else {
-  //         ml_append_buf(buf, (linenr_T)linenr - 1, term->textbuf, 0, false);
-  //         added++;
-  //       }
-  //     }
-  //     vtermz_restore_cursor(term->vtz);
-  //     int change_start = (int)vt_topline; // row_to_linenr(term, term->invalid_start);
-  //     int change_end = change_start + changed;
-  //     changed_lines(buf, change_start, 0, change_end, added, true);
-  //
-  //   }
-  // }
+
   // Terminal height may have decreased before `invalid_end` reflects it.
   size_t total_rows = vtermz_total_rows(term->vtz);
   term->invalid_end = MIN(term->invalid_end, (int)total_rows);
+
+  // This can happen if the vterm is reset/cleared
+  if (buf->b_ml.ml_line_count > (int)total_rows) {
+    term->invalid_start = 0;
+    term->invalid_end = (int)total_rows;
+
+    size_t to_delete = (size_t)buf->b_ml.ml_line_count - total_rows;
+    for (size_t i = 0; i < to_delete; i++) {
+      ml_delete_buf(buf, (linenr_T)total_rows + 1, false);
+    }
+    mark_adjust_buf(buf, 1, (linenr_T)total_rows + 1, MAXLNUM, -(linenr_T)to_delete, true,
+                    kMarkAdjustTerm, kExtmarkUndo);
+    deleted_lines_buf(buf, (linenr_T)total_rows + 1, (linenr_T)to_delete);
+  }
 
   // WLOG("refresh_screen invalid_start=%d, invalid_end=%d", term->invalid_start, term->invalid_end);
   // // There are no invalid rows.
@@ -2709,19 +2685,6 @@ static void refresh_screen(Terminal *term, buf_T *buf)
     return;
   }
 
-
-  // int new_line_count = vtermz_get_new_line_count(term->vtz);
-  // int new_line_count = 41;
-  // for (int r = height - new_line_count, linenr = buf->b_ml.ml_line_count - r; r < height; r++, linenr++) {
-  // size_t top_linenr = (size_t)MAX(buf->b_ml.ml_line_count - height, 0);
-  // size_t top_linenr = vtermz_scroll_bottom(term->vtz);
-  // size_t top_linenr = vtermz_top_linenr(term->vtz);
-  // size_t total_rows = vtermz_total_rows(term->vtz);
-  // // WLOG("refresh screen start=%d, end=%d, top_linenr=%zu", term->invalid_start, term->invalid_end, top_linenr);
-  // WLOG("refresh screen start=%d, end=%d, top_linenr=%zu, ml_line_count: %d, ml_line_lnum: %d", term->invalid_start, term->invalid_end, top_linenr, buf->b_ml.ml_line_count, buf->b_ml.ml_line_lnum);
-  // top_linenr = vtermz_scroll_linenr(term->vtz, top_linenr);
-  // vtermz_scroll_linenr(term->vtz, (size_t)MAX(term->invalid_start - 1, 0));
-  // int remaining = term->invalid_end - term->invalid_start;
   linenr_T linenr = term->invalid_start + 1;
   linenr_T top_linenr = 0;
   size_t row = 0;
@@ -2734,7 +2697,7 @@ static void refresh_screen(Terminal *term, buf_T *buf)
         // initial scroll to invalid start
         top_linenr = 1 + (int)vtermz_scroll_linenr(term->vtz, (size_t)MAX(linenr - 1, 0));
       }
-      // assert(linenr >= top_linenr);
+      assert(linenr >= top_linenr);
       row = (size_t)(linenr - top_linenr);
     }
     fetch_rowz(term, row, width);
@@ -2746,40 +2709,7 @@ static void refresh_screen(Terminal *term, buf_T *buf)
       ml_append_buf(buf, linenr - 1, term->textbuf, 0, false);
       added++;
     }
-
   }
-  // for (int linenr = term->invalid_start + 1; linenr < term->invalid_end + 1; linenr++) {
-  // }
-  // for (size_t r = 0, linenr = top_linenr + 1;
-  //      r < height; r++, linenr++) {
-  // // for (int r = term->invalid_start, linenr = row_to_linenr(term, r);
-  // //      r < term->invalid_end; r++, linenr++) {
-  //   // WLOG("appending to buf: row=%zu, linenr=%zu", r, linenr);
-  //   fetch_lnum(term, r, width);
-  //   // WLOG("setting line %zu to value:'%s'", linenr, term->textbuf);
-  //
-  //   if ((linenr_T)linenr <= buf->b_ml.ml_line_count) {
-  //     ml_replace_buf(buf, (linenr_T)linenr, term->textbuf, true, false);
-  //     changed++;
-  //   } else {
-  //     ml_append_buf(buf, (linenr_T)linenr - 1, term->textbuf, 0, false);
-  //     added++;
-  //   }
-  // }
-  // for (size_t linenr = 1; linenr <= total_rows; linenr++) {
-  // // for (int r = term->invalid_start, linenr = row_to_linenr(term, r);
-  // //      r < term->invalid_end; r++, linenr++) {
-  //   // WLOG("appending to buf: row=%zu, linenr=%zu", r, linenr);
-  //   fetch_lnum(term, linenr, width);
-  //
-  //   if ((linenr_T)linenr <= buf->b_ml.ml_line_count) {
-  //     ml_replace_buf(buf, (linenr_T)linenr, term->textbuf, true, false);
-  //     changed++;
-  //   } else {
-  //     ml_append_buf(buf, (linenr_T)linenr - 1, term->textbuf, 0, false);
-  //     added++;
-  //   }
-  // }
 
   int change_start = term->invalid_start + 1; // row_to_linenr(term, term->invalid_start);
   int change_end = change_start + changed;
