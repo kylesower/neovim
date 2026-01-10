@@ -418,6 +418,10 @@ pub const Handler = struct {
             .mouse_format_urxvt => self.terminal.flags.mouse_format = if (enabled) .urxvt else .x10,
             .mouse_format_sgr_pixels => self.terminal.flags.mouse_format = if (enabled) .sgr_pixels else .x10,
 
+            .report_color_scheme => if (self.callbacks.report_color_scheme) |report_color_scheme| {
+                _ = report_color_scheme(enabled, self.cbdata);
+            },
+
             else => {},
         }
     }

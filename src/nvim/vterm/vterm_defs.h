@@ -426,6 +426,7 @@ typedef struct {
   int (*on_dcs)(const char *buf, size_t len, void *user);
   int (*set_title)(const char *title, size_t len, void *user);
   int (*cursor_style)(VTermZCursorStyle style, void *user);
+  int (*report_color_scheme)(bool enabled, void *user);
   // int (*sb_pushline)(int cols, const VTermScreenCell *cells, void *user);
   // int (*sb_popline)(int cols, VTermScreenCell *cells, void *user);
   // int (*sb_clear)(void *user);

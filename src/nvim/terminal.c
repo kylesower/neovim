@@ -241,6 +241,7 @@ static VTermZCallbacks vtermz_screen_callbacks = {
   .on_apc = on_apcz,
   .cursor_style = term_cursor_style,
   .set_title = term_set_title,
+  .report_color_scheme = term_report_color_scheme,
 };
 
 static VTermSelectionCallbacks vterm_selection_callbacks = {
@@ -1673,6 +1674,14 @@ static int term_theme(bool *dark, void *data)
   FUNC_ATTR_NONNULL_ALL
 {
   *dark = (*p_bg == 'd');
+  return 1;
+}
+
+static int term_report_color_scheme(bool enabled, void *data)
+  FUNC_ATTR_NONNULL_ALL
+{
+  Terminal *term = data;
+  term->theme_updates = enabled;
   return 1;
 }
 
