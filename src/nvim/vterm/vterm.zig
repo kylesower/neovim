@@ -2084,11 +2084,14 @@ pub export fn vtermz_fill_buf_row_utf8(
     // const sb = vt.t.screens.active.pages.scrollbar();
     // log.warn(@src(), "fetching row {} with sb {any}", .{ row, sb });
 
-    const cell_row = vt.rs.row_data.items(.cells)[@intCast(row)];
+    const cell_row: std.MultiArrayList(ghostty_vt.RenderState.Cell) =
+        vt.rs.row_data.items(.cells)[@intCast(row)];
     const end_col_clamped = @min(end_col, cell_row.len);
 
     const cells_raw: []ghostty_vt.Cell = cell_row.items(.raw);
     const cells_grapheme: [][]const u21 = cell_row.items(.grapheme);
+    // TODO: make faster using vt.rs.row_data.get(0).raw.grapheme to determine
+    // if any cells have multi-codepoint grapheme clusters.
 
     var col_idx: usize = @intCast(start_col);
     while (col_idx < end_col_clamped) {
@@ -2192,13 +2195,14 @@ pub export fn vtermz_fill_buf_row_style(
 ) callconv(.c) usize {
     if (row >= vt.rs.row_data.len or start_col > end_col or end_col == 0) return 0;
 
-    const cell_row = vt.rs.row_data.items(.cells)[@intCast(row)];
-    const end_col_clamped: usize = @intCast(@min(end_col, cell_row.len, buf_max_len));
+    const row_data = vt.rs.row_data.get(row);
+    const cell_row = row_data.cells;
+    const end_col_clamped = @min(end_col, cell_row.len, buf_max_len);
 
     const cells_raw: []ghostty_vt.Cell = cell_row.items(.raw);
     const cells_style: []ghostty_vt.Style = cell_row.items(.style);
 
-    for (@intCast(start_col)..end_col_clamped) |col_idx| {
+    for (start_col..end_col_clamped) |col_idx| {
         const cell_raw = cells_raw[col_idx];
         const style: ghostty_vt.Style = if (cell_raw.style_id == 0) .{} else cells_style[col_idx];
         buf[col_idx].fg = ghostty_color_to_termcolor(style.fg_color);
@@ -2213,7 +2217,33 @@ pub export fn vtermz_fill_buf_row_style(
         buf[col_idx].flags.overline = style.flags.overline;
         buf[col_idx].flags.strikethrough = style.flags.strikethrough;
         buf[col_idx].flags.underline_style = @intCast(style.flags.underline.cval());
+        buf[col_idx].uri_len = 0;
     }
+
+    // Most of the time the row won't have any hyperlinks
+    // TODO: make this work. For whatever reason, it seems to find hyperlinks in the wrong
+    // cells.
+    // if (row_data.raw.hyperlink) {
+    //     const link_page = row_data.pin.node.data;
+    //     log.warn(@src(), "row {} hyperlink count: {}", .{row, link_page.hyperlink_set.count()});
+    //     for (start_col..end_col_clamped) |col_idx| {
+    //         const rac = link_page.getRowAndCell(row, col_idx);
+    //         // const cell = row_data.cells.get(col_idx).raw;
+    //         if (!rac.cell.hyperlink) continue;
+    //         log.warn(@src(), "cell should have hyperlink: ({}, {})", .{row, col_idx});
+    //         const link_id = link_page.lookupHyperlink(rac.cell) orelse {
+    //             // log.warn(@src(), "no hyperlink in ({}, {})", .{ row, col_idx });
+    //             continue;
+    //         };
+    //         const link = link_page.hyperlink_set.get(link_page.memory, link_id);
+    //         const uri = link.uri.slice(link_page.memory);
+    //         log.warn(@src(), "yay, got hyperlink for ({}, {}). link={s}", .{ row, col_idx, uri });
+    //         buf[col_idx].uri = uri.ptr;
+    //         buf[col_idx].uri_len = uri.len;
+    //     }
+    // } else {
+    //     log.warn(@src(), "no hyperlinks for row {}", .{row});
+    // }
 
     return end_col_clamped;
 }

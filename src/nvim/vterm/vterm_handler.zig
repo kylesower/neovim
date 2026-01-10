@@ -241,7 +241,22 @@ pub const Handler = struct {
             .decaln => try self.terminal.decaln(),
             .full_reset => self.terminal.fullReset(),
             .start_hyperlink => try self.terminal.screens.active.startHyperlink(value.uri, value.id),
-            .end_hyperlink => self.terminal.screens.active.endHyperlink(),
+            .end_hyperlink => {
+                // if (self.terminal.screens.active.cursor.hyperlink_id > 0) {
+                //     const page = self.terminal.screens.active.cursor.page_pin.node.data;
+                //     const link = page.hyperlink_set.get(
+                //         page.memory,
+                //         self.terminal.screens.active.cursor.hyperlink_id,
+                //     );
+                //     const uri = link.uri.slice(page.memory);
+                //     // log.warn(@src(), "end_hyperlink id={}: '{s}', cursor_uri='{s}'", .{
+                //     //     self.terminal.screens.active.cursor.hyperlink_id,
+                //     //     uri,
+                //     //     self.terminal.screens.active.cursor.hyperlink.?.uri,
+                //     // });
+                // }
+                self.terminal.screens.active.endHyperlink();
+            },
             .prompt_start => {
                 self.terminal.screens.active.cursor.page_row.semantic_prompt = .prompt;
                 self.terminal.flags.shell_redraws_prompt = value.redraw;

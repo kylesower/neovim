@@ -1496,10 +1496,14 @@ void terminal_get_line_attributes(Terminal *term, win_T *wp, int linenr, int *te
       });
     }
 
-    // TODO: uri
-    // if (cell.uri > 0) {
-    //   attr_id = hl_combine_attr(attr_id, cell.uri);
-    // }
+    if (style.uri_len > 0) {
+      // TODO: make this more efficient
+      char *uri = xmemdupz(style.uri, style.uri_len);
+      int uri_attr_id = hl_add_url(0, uri);
+      // WLOG("got hyperlink (%d, %zu), attr_id=%d: '%s'", linenr, col, uri_attr_id, uri);
+      attr_id = hl_combine_attr(attr_id, uri_attr_id);
+      XFREE_CLEAR(uri);
+    }
 
     term_attrs[col] = attr_id;
   }

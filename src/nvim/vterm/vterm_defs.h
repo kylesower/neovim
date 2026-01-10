@@ -375,6 +375,8 @@ typedef union {
 
 typedef struct {
   VTermZColor fg, bg, underline_color;
+  const char *uri;
+  size_t uri_len;
   struct {
       bool bold;
       bool italic;
