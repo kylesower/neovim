@@ -2223,6 +2223,7 @@ pub export fn vtermz_fill_buf_row_style(
 /// how many columns are truly in the row (as well as `buf_max_len`).
 pub export fn vtermz_fill_buf_lnum_style(
     vt: *VTerm,
+    /// Zero indexed line number
     lnum: usize,
     start_col: usize,
     /// End col exclusive
@@ -2235,8 +2236,10 @@ pub export fn vtermz_fill_buf_lnum_style(
         return 0;
     }
     // log.warn(@src(), "getting lnum style for lnum={}", .{lnum});
-    // TODO: I'm not sure how to avoid this if the caller needs to request arbitrary
-    // line numbers. Getting the scrollbar every time is potentially expensive.
+    // TODO: make sure this operation isn't too expensive. I believe the scrollbar
+    // should be cached by ghosttty most of the time with how this function gets called.
+    // The documentation warns that it can be expensive to calculate depending
+    // on the circumstances.
     const sb = vt.t.screens.active.pages.scrollbar();
     const to_scroll = @as(isize, @intCast(lnum)) - @as(isize, @intCast(sb.offset));
     // log.warn(@src(), "sb: {any}, to_scroll={}", .{sb, to_scroll});
@@ -2245,14 +2248,10 @@ pub export fn vtermz_fill_buf_lnum_style(
         // log.warn(@src(), "lnum exists at row {}, no scroll necessary", .{to_scroll});
         break :blk vtermz_fill_buf_row_style(vt, @intCast(to_scroll), start_col, end_col, buf, buf_max_len);
     } else blk: {
-        // TODO: I'm not sure how to avoid this if the caller needs to request arbitrary
-        // line numbers. This is terrible.
         // log.warn(@src(), "scrolling {}", .{to_scroll});
         vt.t.scrollViewport(.{ .delta = to_scroll }) catch {};
         vtermz_refresh(vt);
         const res = vtermz_fill_buf_row_style(vt, 0, start_col, end_col, buf, buf_max_len);
-        vt.t.scrollViewport(.{ .delta = -to_scroll }) catch {};
-        vtermz_refresh(vt);
         break :blk res;
     };
 }
