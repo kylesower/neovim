@@ -2519,7 +2519,7 @@ static void refresh_size(Terminal *term, buf_T *buf)
   uint16_t width, height;
   vtermz_get_size(term->vtz, &height, &width);
   term->invalid_start = 0;
-  term->invalid_end = height;
+  term->invalid_end = (int)vtermz_total_rows(term->vtz);
   term->opts.resize_cb(width, height, term->opts.data);
 }
 
@@ -2678,7 +2678,7 @@ static void refresh_screen(Terminal *term, buf_T *buf)
   }
 
   // WLOG("refresh_screen invalid_start=%d, invalid_end=%d", term->invalid_start, term->invalid_end);
-  // // There are no invalid rows.
+  // There are no invalid rows.
   if (term->invalid_start >= term->invalid_end) {
     term->invalid_start = INT_MAX;
     term->invalid_end = -1;

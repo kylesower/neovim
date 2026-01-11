@@ -2305,17 +2305,14 @@ pub export fn vtermz_set_size(vt: *VTerm, rows: u16, cols: u16) callconv(.c) voi
         return;
     }
 
+    // log.warn(@src(), "updating term size from ({}, {}) to ({}, {}). total_rows={}", .{ vt.t.rows, vt.t.cols, rows, cols, vt.t.screens.active.pages.total_rows });
     // TODO: is there even anything we can do if it errors?
     vt.t.resize(vt.allocator, @intCast(cols), @intCast(rows)) catch return;
-
-    // TODO: figure out if we need parser callbacks. Probably not.
-    // const callbacks = vt.parser.callbacks orelse return;
-    // const resize = callbacks.resize orelse return;
-    // const cbdata = vt.parser.cbdata orelse return;
-    // _ = resize(rows, cols, cbdata);
+    vt.s.handler.damage_start = 0;
+    vt.s.handler.damage_end = @intCast(vt.t.screens.active.pages.total_rows);
+    // log.warn(@src(), "new total_rows={}", .{ vt.t.screens.active.pages.total_rows });
 }
 
-// DONE
 pub export fn vtermz_set_utf8(vt: *VTerm, is_utf8: bool) callconv(.c) void {
     vt.t.configureCharset(.G0, if (is_utf8) .utf8 else .ascii);
     // vt.t.configureCharset(.G1, if (is_utf8) .utf8 else .ascii);
@@ -2323,7 +2320,6 @@ pub export fn vtermz_set_utf8(vt: *VTerm, is_utf8: bool) callconv(.c) void {
     // vt.t.configureCharset(.G3, if (is_utf8) .utf8 else .ascii);
 }
 
-// DONE
 pub export fn vtermz_state_set_palette_color(vt: *VTerm, index: u8, col: *const c.VTermZColor) callconv(.c) void {
     if (index >= 0 and index < 16) vt.t.colors.palette.set(index, .{
         .r = col.rgb.r,
