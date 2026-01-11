@@ -8,7 +8,6 @@
 #include "nvim/types_defs.h"  // IWYU pragma: keep
 #include "nvim/vterm/keyboard.h"
 #include "nvim/vterm/vterm_defs.h"
-#include "nvim/vterm/vtermz.h"
 
 typedef void (*terminal_write_cb)(const char *buffer, size_t size, void *data);
 typedef void (*terminal_resize_cb)(uint16_t width, uint16_t height, void *data);
