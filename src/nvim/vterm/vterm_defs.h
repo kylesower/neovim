@@ -334,10 +334,6 @@ typedef struct {
 //////////////////////////
 typedef struct VTermZ VTermZ;
 
-#define VTERMZ_COLOR_NONE 0
-#define VTERMZ_COLOR_RGB 1
-#define VTERMZ_COLOR_PALETTE 2
-
 #define VTERMZ_COLOR_IS_DEFAULT(col) \
   (col.type == VTERMZ_COLOR_NONE)
 
@@ -356,6 +352,9 @@ typedef enum {
     VTERMZ_UNDERLINE_DASHED = 5,
 } VTermZUnderlineStyle;
 
+#define VTERMZ_COLOR_NONE 0
+#define VTERMZ_COLOR_RGB 1
+#define VTERMZ_COLOR_PALETTE 2
 typedef union {
   uint8_t type;
   struct {

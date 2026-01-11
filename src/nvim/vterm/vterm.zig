@@ -2078,11 +2078,6 @@ pub export fn vtermz_fill_buf_row_utf8(
     var idx: usize = 0;
 
     if (row >= vt.rs.row_data.len or start_col > end_col or end_col == 0) return idx;
-    // log.warn(@src(), "filling buf row utf8 for row: {}", .{row});
-    // vt.t.screens.active.pages.total_rows;
-    // vt.t.screens.active.scroll(.{ .row = 7 });
-    // const sb = vt.t.screens.active.pages.scrollbar();
-    // log.warn(@src(), "fetching row {} with sb {any}", .{ row, sb });
 
     const cell_row: std.MultiArrayList(ghostty_vt.RenderState.Cell) =
         vt.rs.row_data.items(.cells)[@intCast(row)];
@@ -2094,17 +2089,25 @@ pub export fn vtermz_fill_buf_row_utf8(
     // if any cells have multi-codepoint grapheme clusters.
 
     var col_idx: usize = @intCast(start_col);
+    var seen_char = false;
     while (col_idx < end_col_clamped) {
         const cell_raw = cells_raw[col_idx];
         const grapheme = cells_grapheme[col_idx];
         switch (cell_raw.content_tag) {
             .codepoint => {
-                if (cell_raw.content.codepoint == 0) {
+                // In rows that have text, there can be null codepoints leading up to the text,
+                // and there can be null codepoints after any text. This condition is so that the
+                // buf only extends as far as the text does, and any leading null codepoints
+                // are converted to spaces.
+                if (!seen_char and cell_raw.content.codepoint == 0) {
                     buf[idx] = ' ';
                     idx += 1;
                     col_idx += 1;
                     continue;
+                } else {
+                    seen_char = true;
                 }
+
                 idx += std.unicode.utf8Encode(cell_raw.content.codepoint, buf[idx..buf_max_len]) catch return idx;
                 // log.warn(
                 //     @src(),
@@ -2115,6 +2118,7 @@ pub export fn vtermz_fill_buf_row_utf8(
             .codepoint_grapheme => {
                 // TODO: handle links.
                 // TODO: keycap emojis seem to not work in a nested nvim
+                seen_char = true;
                 idx += std.unicode.utf8Encode(cell_raw.content.codepoint, buf[idx..buf_max_len]) catch return idx;
                 for (grapheme) |g| {
                     idx += std.unicode.utf8Encode(g, buf[idx..buf_max_len]) catch return idx;
@@ -2125,20 +2129,24 @@ pub export fn vtermz_fill_buf_row_utf8(
                 //     .{ row, col_idx, buf[start_idx..idx], buf[start_idx..idx] },
                 // );
             },
+            // I believe these only come after any text in the row, but I'm not entirely sure.
             .bg_color_palette, .bg_color_rgb => {
-                // log.warn(@src(), "row={}, col_idx={}: adding blank space", .{ row, col_idx });
-                buf[idx] = ' ';
-                idx += 1;
+                buf[idx] = 0x00;
+                // idx += 1;
             },
         }
+
         // We advance by the grid width each time, not by 1. Some characters span
         // a width of 2 cols, but the grapheme data is stored entirely in the first
         // col that the character occupies.
         const width = cell_raw.gridWidth();
-        // if (width > 1) {
-        //     log.warn(@src(), "row={}, col_idx={}: extra width: {d}", .{ row, col_idx, width });
-        // }
         col_idx += width;
+    }
+
+    if (!seen_char) {
+        // No real content, so this should be considered an empty line.
+        buf[0] = 0x00;
+        idx = 0;
     }
 
     return idx;
