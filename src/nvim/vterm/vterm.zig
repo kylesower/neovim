@@ -28,7 +28,7 @@ fn test_preserve_exit(e: [*]const u8) noreturn {
 }
 
 const builtin = @import("builtin");
-// Don't feel like touching main.c so I can access preserve_exit in tests.
+// Don't feel like touching main.c just so I can access preserve_exit in tests.
 const preserve_exit = if (builtin.is_test) test_preserve_exit else c.preserve_exit;
 const e_outofmem = c.e_outofmem;
 pub const NUL = '\x00';
@@ -1046,30 +1046,29 @@ pub export fn vtermz_fill_buf_row_style(
         // }
     }
 
+    // TODO: Speed up hyperlinks. Not sure if the problem is here or elsewhere. Try a for loop
+    // with 100 `ls --hyperlink` to see.
     // Most of the time the row won't have any hyperlinks
-    // TODO: make this work. For whatever reason, it seems to find hyperlinks in the wrong
-    // cells.
-    // if (row_data.raw.hyperlink) {
-    //     const link_page = row_data.pin.node.data;
-    //     log.warn(@src(), "row {} hyperlink count: {}", .{row, link_page.hyperlink_set.count()});
-    //     for (start_col..end_col_clamped) |col_idx| {
-    //         const rac = link_page.getRowAndCell(row, col_idx);
-    //         // const cell = row_data.cells.get(col_idx).raw;
-    //         if (!rac.cell.hyperlink) continue;
-    //         log.warn(@src(), "cell should have hyperlink: ({}, {})", .{row, col_idx});
-    //         const link_id = link_page.lookupHyperlink(rac.cell) orelse {
-    //             // log.warn(@src(), "no hyperlink in ({}, {})", .{ row, col_idx });
-    //             continue;
-    //         };
-    //         const link = link_page.hyperlink_set.get(link_page.memory, link_id);
-    //         const uri = link.uri.slice(link_page.memory);
-    //         log.warn(@src(), "yay, got hyperlink for ({}, {}). link={s}", .{ row, col_idx, uri });
-    //         buf[col_idx].uri = uri.ptr;
-    //         buf[col_idx].uri_len = uri.len;
-    //     }
-    // } else {
-    //     log.warn(@src(), "no hyperlinks for row {}", .{row});
-    // }
+    if (row_data.raw.hyperlink) {
+        const link_page = row_data.pin.node.data;
+        // const page_row = link_page.getRow(row_data.pin.y);
+        // const cells = link_page.getCells(page_row);
+        for (start_col..end_col_clamped) |col_idx| {
+            if (!cells_raw[col_idx].hyperlink) continue;
+            // I'm not sure if this pin y can be different from `row`
+            // log.warn(@src(), "getting row and cell: ({}, {})", .{ row, col_idx });
+            const rac = link_page.getRowAndCell(col_idx, row_data.pin.y);
+            // log.warn(@src(), "cell should have hyperlink: ({}, {})", .{ row, col_idx });
+            const link_id = link_page.lookupHyperlink(rac.cell) orelse continue;
+            // log.warn(@src(), "getting from hyperlink set: ({}, {}), link_id={}", .{ row, col_idx, link_id });
+            const link = link_page.hyperlink_set.get(link_page.memory, link_id);
+            // log.warn(@src(), "getting uri slice: ({}, {})", .{ row, col_idx });
+            const uri = link.uri.slice(link_page.memory);
+            // log.warn(@src(), "yay, got hyperlink for ({}, {}). link={s}", .{ row, col_idx, uri });
+            buf[col_idx].uri = uri.ptr;
+            buf[col_idx].uri_len = uri.len;
+        }
+    }
 
     return end_col_clamped;
 }

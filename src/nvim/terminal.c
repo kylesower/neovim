@@ -1437,15 +1437,13 @@ static int get_underline_hl_flagz(uint8_t underline)
 
 void terminal_get_line_attributes(Terminal *term, win_T *wp, int linenr, int *term_attrs)
 {
+  // Have to do a refresh here because this is called externally, so we can't
+  // be sure the render state is up to date.
+  vtermz_refresh(term->vtz);
+
   uint16_t height, width;
   vtermz_get_size(term->vtz, &height, &width);
   assert(linenr);
-  // int row = linenr_to_row(term, linenr);
-  // if (row >= height) {
-  //   // Terminal height was decreased but the change wasn't reflected into the
-  //   // buffer yet
-  //   return;
-  // }
 
   width = MIN(TERM_ATTRS_MAX, width);
   VTermZStyle styles[TERM_ATTRS_MAX];
@@ -1499,14 +1497,13 @@ void terminal_get_line_attributes(Terminal *term, win_T *wp, int linenr, int *te
       });
     }
 
-    // if (style.uri_len > 0) {
-    //   // TODO: make this more efficient
-    //   char *uri = xmemdupz(style.uri, style.uri_len);
-    //   int uri_attr_id = hl_add_url(0, uri);
-    //   // WLOG("got hyperlink (%d, %zu), attr_id=%d: '%s'", linenr, col, uri_attr_id, uri);
-    //   attr_id = hl_combine_attr(attr_id, uri_attr_id);
-    //   XFREE_CLEAR(uri);
-    // }
+    if (style.uri_len > 0) {
+      // TODO: make this more efficient
+      char *uri = xmemdupz(style.uri, style.uri_len);
+      int uri_attr_id = hl_add_url(0, uri);
+      attr_id = hl_combine_attr(attr_id, uri_attr_id);
+      XFREE_CLEAR(uri);
+    }
 
     term_attrs[col] = attr_id;
   }
