@@ -376,6 +376,7 @@ typedef struct {
   VTermZColor fg, bg, underline_color;
   const char *uri;
   size_t uri_len;
+  uint16_t uri_id;
   struct {
       bool bold;
       bool italic;

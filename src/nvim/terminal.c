@@ -1448,6 +1448,8 @@ void terminal_get_line_attributes(Terminal *term, win_T *wp, int linenr, int *te
   width = MIN(TERM_ATTRS_MAX, width);
   VTermZStyle styles[TERM_ATTRS_MAX];
   size_t num_cols = vtermz_fill_buf_lnum_style(term->vtz, (size_t)linenr - 1, 0, width, styles, TERM_ATTRS_MAX);
+  uint16_t last_uri_id = 0;
+  int uri_attr_id = 0;
   for (size_t col = 0; col < num_cols; col++) {
     VTermZStyle style = styles[col];
     // VTermScreenCellZ cell = {0};
@@ -1498,11 +1500,18 @@ void terminal_get_line_attributes(Terminal *term, win_T *wp, int linenr, int *te
     }
 
     if (style.uri_len > 0) {
-      // TODO: make this more efficient
-      char *uri = xmemdupz(style.uri, style.uri_len);
-      int uri_attr_id = hl_add_url(0, uri);
-      attr_id = hl_combine_attr(attr_id, uri_attr_id);
-      XFREE_CLEAR(uri);
+      if (style.uri_id == last_uri_id) {
+        attr_id = hl_combine_attr(attr_id, uri_attr_id);
+      } else {
+        last_uri_id = style.uri_id;
+        // TODO: make this more efficient. Very unfortunate that the URL set uses C strings.
+        // Perhaps something can be done in the vterm_handler.zig to maintain its own set of
+        // URLs and save the attr IDs (or via callback).
+        char *uri = "file:///tmp/rand.txt"; // xmemdupz(style.uri, style.uri_len);
+        uri_attr_id = hl_add_url(0, uri);
+        attr_id = hl_combine_attr(attr_id, uri_attr_id);
+        // XFREE_CLEAR(uri);
+      }
     }
 
     term_attrs[col] = attr_id;

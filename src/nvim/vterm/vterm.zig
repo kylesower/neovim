@@ -1060,6 +1060,8 @@ pub export fn vtermz_fill_buf_row_style(
             const rac = link_page.getRowAndCell(col_idx, row_data.pin.y);
             // log.warn(@src(), "cell should have hyperlink: ({}, {})", .{ row, col_idx });
             const link_id = link_page.lookupHyperlink(rac.cell) orelse continue;
+            // According to the docs, ID 0 is reserved and will never be assigned.
+            std.debug.assert(link_id != 0);
             // log.warn(@src(), "getting from hyperlink set: ({}, {}), link_id={}", .{ row, col_idx, link_id });
             const link = link_page.hyperlink_set.get(link_page.memory, link_id);
             // log.warn(@src(), "getting uri slice: ({}, {})", .{ row, col_idx });
@@ -1067,6 +1069,7 @@ pub export fn vtermz_fill_buf_row_style(
             // log.warn(@src(), "yay, got hyperlink for ({}, {}). link={s}", .{ row, col_idx, uri });
             buf[col_idx].uri = uri.ptr;
             buf[col_idx].uri_len = uri.len;
+            buf[col_idx].uri_id = link_id;
         }
     }
 
