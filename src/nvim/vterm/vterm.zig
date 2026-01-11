@@ -1417,13 +1417,13 @@ const VTermOutputCallback = *const fn (s: [*]const u8, len: usize, user: ?*anyop
 //
 //   VTERM_ALL_MODS_MASK = 0x07,
 // } VTermModifier;
-pub const VTermModifier = c_int;
-pub const VTERM_MOD_NONE: VTermModifier = 0x00;
-pub const VTERM_MOD_SHIFT: VTermModifier = 0x01;
-pub const VTERM_MOD_ALT: VTermModifier = 0x02;
-pub const VTERM_MOD_CTRL: VTermModifier = 0x04;
-
-pub const VTERM_ALL_MODS_MASK: VTermModifier = 0x07;
+// pub const VTermModifier = c_int;
+// pub const VTERM_MOD_NONE: VTermModifier = 0x00;
+// pub const VTERM_MOD_SHIFT: VTermModifier = 0x01;
+// pub const VTERM_MOD_ALT: VTermModifier = 0x02;
+// pub const VTERM_MOD_CTRL: VTermModifier = 0x04;
+//
+// pub const VTERM_ALL_MODS_MASK: VTermModifier = 0x07;
 
 // typedef enum {
 //   VTERM_KEY_NONE,
@@ -1720,18 +1720,16 @@ pub const VTerm = struct {
     t: *ghostty_vt.Terminal,
     rs: ghostty_vt.RenderState,
     s: Stream,
-    msg_writer: ?VTermMsgWriter,
+    msg_writer: ?VTermMsgWriter = null,
     allocator: std.mem.Allocator,
-    // One for primary and one for alternate screen
-    key_encoding_stack: struct {
-        primary: VTermKeyEncodingStack,
-        alternate: VTermKeyEncodingStack,
-    },
     // TODO: I don't think we even need 64 bytes for this. libvterm had 4096 bytes for
     // outbuffer, but I don't think it was fully used because it was all
     // handled by outfunc. Maybe I'm missing something, though.
-    keyout_buffer: [VTERM_BUF_DEFAULT_SIZE]u8,
+    keyout_buffer: [VTERM_BUF_DEFAULT_SIZE]u8 = undefined,
     keyout_buffer_w: std.Io.Writer,
+    mouse: struct {
+        event_point: ?ghostty_vt.Coordinate,
+    } = .{ .event_point = null },
     // tmpbuffer: [VTERM_BUF_DEFAULT_SIZE]u8,
     // apc_buf: std.ArrayList(u8),
     //
@@ -1784,11 +1782,13 @@ pub export fn vtermz_new(rows: u16, cols: u16) callconv(.c) *VTerm {
     const stream = vterm_handler.Stream.initAlloc(alloc, handler);
 
     var vt = alloc.create(VTerm) catch preserve_exit(e_outofmem);
-    vt.t = t;
-    vt.rs = rs;
-    vt.s = stream;
-    vt.keyout_buffer_w = std.Io.Writer.fixed(&vt.keyout_buffer);
-    vt.allocator = alloc;
+    vt.* = .{
+        .t = t,
+        .rs = rs,
+        .s = stream,
+        .keyout_buffer_w = std.Io.Writer.fixed(&vt.keyout_buffer),
+        .allocator = alloc,
+    };
     return vt;
 }
 
@@ -1908,15 +1908,15 @@ inline fn vterm_key_to_ghostty_key(vkey: VTermKey) ?ghostty_vt.input.Key {
     };
 }
 
-inline fn vterm_mod_to_ghostty_mod(vmod: VTermModifier) ghostty_vt.input.KeyMods {
+inline fn vterm_mod_to_ghostty_mod(vmod: c.VTermModifier) ghostty_vt.input.KeyMods {
     return .{
-        .alt = vmod & VTERM_MOD_ALT > 0,
-        .ctrl = vmod & VTERM_MOD_CTRL > 0,
-        .shift = vmod & VTERM_MOD_SHIFT > 0,
+        .alt = vmod & c.VTERM_MOD_ALT > 0,
+        .ctrl = vmod & c.VTERM_MOD_CTRL > 0,
+        .shift = vmod & c.VTERM_MOD_SHIFT > 0,
     };
 }
 
-pub export fn vtermz_keyboard_key(vt: *VTerm, vkey: VTermKey, vmod: VTermModifier) callconv(.c) void {
+pub export fn vtermz_keyboard_key(vt: *VTerm, vkey: VTermKey, vmod: c.VTermModifier) callconv(.c) void {
     const key = vterm_key_to_ghostty_key(vkey) orelse return;
     const mods = vterm_mod_to_ghostty_mod(vmod);
     const evt: ghostty_vt.input.KeyEvent = .{
@@ -1930,7 +1930,7 @@ pub export fn vtermz_keyboard_key(vt: *VTerm, vkey: VTermKey, vmod: VTermModifie
     _ = vt.keyout_buffer_w.consumeAll();
 }
 
-pub export fn vtermz_keyboard_unichar(vt: *VTerm, ch: u32, vmod: VTermModifier) callconv(.c) void {
+pub export fn vtermz_keyboard_unichar(vt: *VTerm, ch: u32, vmod: c.VTermModifier) callconv(.c) void {
     //   bool passthru = false;
     //   if (c == ' ') {
     //     // Space is passed through only when there are no modifiers (including shift)
@@ -1941,9 +1941,9 @@ pub export fn vtermz_keyboard_unichar(vt: *VTerm, ch: u32, vmod: VTermModifier) 
     //   }
     var passthru = false;
     if (ch == ' ') {
-        passthru = vmod == VTERM_MOD_NONE;
+        passthru = vmod == c.VTERM_MOD_NONE;
     } else {
-        passthru = (vmod & (~VTERM_MOD_SHIFT)) == 0;
+        passthru = (@as(c_int, @intCast(vmod)) & (~c.VTERM_MOD_SHIFT)) == 0;
     }
 
     //   if (passthru) {
@@ -2023,6 +2023,190 @@ pub export fn vtermz_keyboard_unichar(vt: *VTerm, ch: u32, vmod: VTermModifier) 
     _ = vt.keyout_buffer_w.consumeAll();
 }
 
+// This function was adapted from Ghostty's src/Surface.zig
+pub export fn vtermz_mouse_action(
+    vt: *VTerm,
+    button: u8,
+    row: usize,
+    col: u16,
+    pressed: bool,
+    released: bool,
+    mod: c.VTermModifier,
+) void {
+    // log.warn(
+    //     @src(),
+    //     "calling mouse action. button={}, row={}, col={}, pressed={}, released={}, mod={}",
+    //     .{ button, row, col, pressed, released, mod },
+    // );
+    const mods = vterm_mod_to_ghostty_mod(mod);
+
+    // invalid input
+    if (pressed and released) return;
+    const action: enum { press, release, motion } =
+        if (pressed) .press else if (released) .release else .motion;
+
+    // Mouse reporting must be enabled by both config and terminal state
+
+    // Depending on the event, we may do nothing at all.
+    switch (vt.t.flags.mouse_event) {
+        .none => return,
+
+        // X10 only reports clicks with mouse button 1, 2, 3. We verify
+        // the button later.
+        .x10 => if (action != .press or
+            !(button == 1 or
+                button == 2 or
+                button == 3)) return,
+
+        // Doesn't report motion
+        .normal => if (action == .motion) return,
+
+        // Button must be pressed
+        .button => if (button == 0) return,
+
+        // Everything
+        .any => {},
+    }
+
+    // Handle scenarios where the mouse position is outside the viewport.
+    // We always report release events no matter where they happen.
+    const pos_outside_viewport = row < 0 or col < 0 or row >= vt.t.rows or col >= vt.t.cols;
+    if (action != .release and pos_outside_viewport) return;
+
+    const viewport_point: ghostty_vt.Coordinate = .{ .x = col, .y = @intCast(row) };
+
+    // Record our new point. We only want to send a mouse event if the
+    // cell changed, unless we're tracking raw pixels.
+    if (action == .motion and vt.t.flags.mouse_format != .sgr_pixels) {
+        if (vt.mouse.event_point) |last_point| {
+            if (last_point.eql(viewport_point)) return;
+        }
+    }
+    vt.mouse.event_point = viewport_point;
+
+    // Get the code we'll actually write
+    const button_code: u8 = code: {
+        var acc: u8 = 0;
+
+        // Determine our initial button value
+        if (button == 0) {
+            // Null button means motion without a button pressed
+            acc = 3;
+        } else if (action == .release and
+            vt.t.flags.mouse_format != .sgr and
+            vt.t.flags.mouse_format != .sgr_pixels)
+        {
+            // Release is 3. It is NOT 3 in SGR mode because SGR can tell
+            // the application what button was released.
+            acc = 3;
+        } else {
+            acc = switch (button) {
+                // left
+                1 => 0,
+                // middle
+                3 => 1,
+                // right
+                2 => 2,
+                4 => 64,
+                5 => 65,
+                6 => 66,
+                7 => 67,
+                8 => 128,
+                9 => 129,
+                else => return, // unsupported
+            };
+        }
+
+        // X10 doesn't have modifiers
+        if (vt.t.flags.mouse_event != .x10) {
+            if (mods.shift) acc += 4;
+            if (mods.alt) acc += 8;
+            if (mods.ctrl) acc += 16;
+        }
+
+        // Motion adds another bit
+        if (action == .motion) acc += 32;
+
+        break :code acc;
+    };
+
+    switch (vt.t.flags.mouse_format) {
+        .x10 => {
+            if (viewport_point.x > 222 or viewport_point.y > 222) {
+                log.info(@src(), "X10 mouse format can only encode X/Y up to 223", .{});
+                return;
+            }
+
+            // + 1 below is because our x/y is 0-indexed and the protocol wants 1
+            var data: [6]u8 = undefined;
+            data[0] = '\x1b';
+            data[1] = '[';
+            data[2] = 'M';
+            data[3] = 32 + button_code;
+            data[4] = 32 + @as(u8, @intCast(viewport_point.x)) + 1;
+            data[5] = 32 + @as(u8, @intCast(viewport_point.y)) + 1;
+
+            vt.term_send(&data);
+        },
+
+        .utf8 => {
+            // Maximum of 12 because at most we have 2 fully UTF-8 encoded chars
+            var data: [12]u8 = undefined;
+            data[0] = '\x1b';
+            data[1] = '[';
+            data[2] = 'M';
+
+            // The button code will always fit in a single u8
+            data[3] = 32 + button_code;
+
+            // UTF-8 encode the x/y
+            var i: usize = 4;
+            // TODO: log errors?
+            i += std.unicode.utf8Encode(@intCast(32 + viewport_point.x + 1), data[i..]) catch return;
+            i += std.unicode.utf8Encode(@intCast(32 + viewport_point.y + 1), data[i..]) catch return;
+
+            vt.term_send(data[0..i]);
+        },
+
+        .sgr => {
+            // Final character to send in the CSI
+            const final: u8 = if (action == .release) 'm' else 'M';
+
+            // Response always is at least 4 chars, so this leaves the
+            // remainder for numbers which are very large...
+            var data: [64]u8 = undefined;
+            // TODO: log errors?
+            const resp = std.fmt.bufPrint(&data, "\x1B[<{d};{d};{d}{c}", .{
+                button_code,
+                viewport_point.x + 1,
+                viewport_point.y + 1,
+                final,
+            }) catch return;
+
+            vt.term_send(resp);
+        },
+
+        .urxvt => {
+            // Response always is at least 4 chars, so this leaves the
+            // remainder for numbers which are very large...
+            var data: [64]u8 = undefined;
+            // TODO: log errors?
+            const resp = std.fmt.bufPrint(&data, "\x1B[{d};{d};{d}M", .{
+                32 + button_code,
+                viewport_point.x + 1,
+                viewport_point.y + 1,
+            }) catch return;
+
+            vt.term_send(resp);
+        },
+
+        .sgr_pixels => {
+            // unimplemented
+            return;
+        },
+    }
+}
+
 inline fn ghostty_color_to_termcolor(color: ghostty_vt.Style.Color) c.VTermZColor {
     return switch (color) {
         .palette => |idx| .{
@@ -2099,7 +2283,13 @@ pub export fn vtermz_fill_buf_row_utf8(
                 // and there can be null codepoints after any text. This condition is so that the
                 // buf only extends as far as the text does, and any leading null codepoints
                 // are converted to spaces.
+                // if (row == 7) {
+                //   log.warn(@src(), "{}, {}: codepoint='{}'", .{row, col_idx, cell_raw.content.codepoint});
+                // }
                 if (!seen_char and cell_raw.content.codepoint == 0) {
+                    // if (row == 7 or row == 8 or row == 37) {
+                    //     log.warn(@src(), "adding null codepoint to {}, {}", .{ row, col_idx });
+                    // }
                     buf[idx] = ' ';
                     idx += 1;
                     col_idx += 1;
@@ -2131,6 +2321,9 @@ pub export fn vtermz_fill_buf_row_utf8(
             },
             // I believe these only come after any text in the row, but I'm not entirely sure.
             .bg_color_palette, .bg_color_rgb => {
+                // if (row == 7 or row == 8 or row == 37) {
+                //     log.warn(@src(), "row={}, col_idx={}: adding blank space", .{ row, col_idx });
+                // }
                 buf[idx] = 0x00;
                 // idx += 1;
             },
@@ -2140,6 +2333,9 @@ pub export fn vtermz_fill_buf_row_utf8(
         // a width of 2 cols, but the grapheme data is stored entirely in the first
         // col that the character occupies.
         const width = cell_raw.gridWidth();
+        // if (width > 1) {
+        //     log.warn(@src(), "row={}, col_idx={}: extra width: {d}", .{ row, col_idx, width });
+        // }
         col_idx += width;
     }
 
@@ -2210,9 +2406,17 @@ pub export fn vtermz_fill_buf_row_style(
     const cells_raw: []ghostty_vt.Cell = cell_row.items(.raw);
     const cells_style: []ghostty_vt.Style = cell_row.items(.style);
 
+    // if (row == 7) {
+    //     log.warn(@src(), "getting style for row=7 in range {} - {}", .{ start_col, end_col_clamped });
+    // }
     for (start_col..end_col_clamped) |col_idx| {
         const cell_raw = cells_raw[col_idx];
         const style: ghostty_vt.Style = if (cell_raw.style_id == 0) .{} else cells_style[col_idx];
+        // if (cell_raw.style_id == 0 and row == 7) {
+        //     log.warn(@src(), "col={}, using style_id=0", .{col_idx});
+        // } else {
+        //     log.warn(@src(), "col={}, using style bg_color={any}", .{ col_idx, style.bg_color });
+        // }
         buf[col_idx].fg = ghostty_color_to_termcolor(style.fg_color);
         buf[col_idx].bg = ghostty_color_to_termcolor(style.bg_color);
         buf[col_idx].underline_color = ghostty_color_to_termcolor(style.underline_color);
@@ -2226,6 +2430,9 @@ pub export fn vtermz_fill_buf_row_style(
         buf[col_idx].flags.strikethrough = style.flags.strikethrough;
         buf[col_idx].flags.underline_style = @intCast(style.flags.underline.cval());
         buf[col_idx].uri_len = 0;
+        // if (row == 7) {
+        //     log.warn(@src(), "computed style bg for ({}, {})={any}", .{ row, col_idx, buf[col_idx].bg });
+        // }
     }
 
     // Most of the time the row won't have any hyperlinks

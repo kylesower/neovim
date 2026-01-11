@@ -454,6 +454,15 @@ void vtermz_set_size(VTermZ *vt, uint16_t rows, uint16_t cols);
 void vtermz_state_set_palette_color(VTermZ *vt, uint8_t index, const VTermColor *col);
 void vtermz_output_set_callback(VTermZ *vt, VTermOutputCallback *func, void *user);
 void vtermz_keyboard_key(VTermZ *vtz, VTermKey key, VTermModifier mod);
+void vtermz_mouse_action(
+    VTermZ *vt,
+    uint8_t button,
+    size_t row,
+    uint16_t col,
+    bool pressed,
+    bool released,
+    VTermModifier mod
+);
 void vtermz_teardown(void);
 void vtermz_refresh(VTermZ *vt);
 void vtermz_keyboard_unichar(VTermZ *vt, uint32_t c, VTermModifier mod);
