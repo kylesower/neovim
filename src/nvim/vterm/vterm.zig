@@ -729,9 +729,9 @@ pub export fn vtermz_mouse_action(
                 // left
                 1 => 0,
                 // middle
-                3 => 1,
+                2 => 1,
                 // right
-                2 => 2,
+                3 => 2,
                 4 => 64,
                 5 => 65,
                 6 => 66,
