@@ -240,7 +240,11 @@ pub const Handler = struct {
             },
             .active_status_display => self.terminal.status_display = value,
             .decaln => try self.terminal.decaln(),
-            .full_reset => self.terminal.fullReset(),
+            .full_reset => {
+              self.terminal.fullReset();
+              self.damage_start = 0;
+              self.damage_end = @intCast(self.terminal.screens.active.pages.total_rows);
+            },
             .start_hyperlink => try self.terminal.screens.active.startHyperlink(value.uri, value.id),
             .end_hyperlink => {
                 // if (self.terminal.screens.active.cursor.hyperlink_id > 0) {
@@ -982,47 +986,6 @@ pub const Handler = struct {
         }
     }
 };
-
-// pub const VTermZOscColor = extern struct {
-//     command: c_int,
-//     buf: [*]const u8,
-//     len: usize = 0,
-//     terminator: vterm.VTermZTerminator,
-// };
-//
-// c.VTermZCallbacks
-// pub const VTermZCallbacks = extern struct {
-//     // moverect: ?*const fn (dest: VTermRect, src: VTermRect, user: *anyopaque) callconv(.c) c_int,
-//     movecursor: ?*const fn (
-//         row: usize,
-//         col: usize,
-//         row_abs: usize,
-//         user: ?*anyopaque,
-//     ) callconv(.c) c_int = null,
-//     // settermprop: ?*const fn (
-//     //     prop: VTermProp,
-//     //     val: *VTermValue,
-//     //     user: ?*anyopaque,
-//     // ) callconv(.c) c_int = null,
-//     damage: ?*const fn (start_row: usize, end_row: usize, start_lnum: usize, end_lnum: usize, user: ?*anyopaque) callconv(.c) c_int = null,
-//     bell: ?*const fn (user: ?*anyopaque) callconv(.c) c_int = null,
-//     theme: ?*const fn (dark: *bool, user: ?*anyopaque) callconv(.c) c_int = null,
-//     osc_color: ?*const fn (osc: VTermZOscColor, user: ?*anyopaque) callconv(.c) c_int = null,
-//     on_apc: ?*const fn (buf: [*]const u8, len: usize, user: ?*anyopaque) callconv(.c) c_int = null,
-//     on_dcs: ?*const fn (buf: [*]const u8, len: usize, user: ?*anyopaque) callconv(.c) c_int = null,
-//     cursor_style: ?*const fn (style: c.VTermZCursorStyle, user: ?*anyopaque) callconv(.c) c_int = null,
-//     // sb_pushline: ?*const fn (
-//     //     cols: c_int,
-//     //     cells: [*]const VTermScreenCell,
-//     //     user: *anyopaque,
-//     // ) callconv(.c) c_int,
-//     // sb_popline: ?*const fn (
-//     //     cols: c_int,
-//     //     cells: [*]VTermScreenCell,
-//     //     user: *anyopaque,
-//     // ) callconv(.c) c_int,
-//     // sb_clear: ?*const fn (user: *anyopaque) callconv(.c) c_int,
-// };
 
 // test "basic print" {
 //     var t: Terminal = try .init(testing.allocator, .{ .cols = 10, .rows = 10 });
