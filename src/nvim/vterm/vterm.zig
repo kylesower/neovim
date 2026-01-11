@@ -898,32 +898,24 @@ pub export fn vtermz_fill_buf_row_utf8(
     // if any cells have multi-codepoint grapheme clusters.
 
     var col_idx: usize = @intCast(start_col);
-    var seen_char = false;
+    // There can be null codepoints leading up to the text, and there can be null
+    // codepoints after/in between text. We record the max_char_idx (the last index
+    // of a real character) so that we know how far the buf should truly extend.
+    var max_char_idx: usize = 0;
     while (col_idx < end_col_clamped) {
         const cell_raw = cells_raw[col_idx];
         const grapheme = cells_grapheme[col_idx];
         switch (cell_raw.content_tag) {
             .codepoint => {
-                // In rows that have text, there can be null codepoints leading up to the text,
-                // and there can be null codepoints after any text. This condition is so that the
-                // buf only extends as far as the text does, and any leading null codepoints
-                // are converted to spaces.
-                // if (row == 7) {
-                //   log.warn(@src(), "{}, {}: codepoint='{}'", .{row, col_idx, cell_raw.content.codepoint});
-                // }
-                if (!seen_char and cell_raw.content.codepoint == 0) {
-                    // if (row == 7 or row == 8 or row == 37) {
-                    //     log.warn(@src(), "adding null codepoint to {}, {}", .{ row, col_idx });
-                    // }
+                if (cell_raw.content.codepoint == 0) {
                     buf[idx] = ' ';
                     idx += 1;
                     col_idx += 1;
                     continue;
-                } else {
-                    seen_char = true;
                 }
 
                 idx += std.unicode.utf8Encode(cell_raw.content.codepoint, buf[idx..buf_max_len]) catch return idx;
+                max_char_idx = idx;
                 // log.warn(
                 //     @src(),
                 //     "row={d}, col_idx={d}: put single grapheme: {s} ({any}) (w={})",
@@ -933,11 +925,11 @@ pub export fn vtermz_fill_buf_row_utf8(
             .codepoint_grapheme => {
                 // TODO: handle links.
                 // TODO: keycap emojis seem to not work in a nested nvim
-                seen_char = true;
                 idx += std.unicode.utf8Encode(cell_raw.content.codepoint, buf[idx..buf_max_len]) catch return idx;
                 for (grapheme) |g| {
                     idx += std.unicode.utf8Encode(g, buf[idx..buf_max_len]) catch return idx;
                 }
+                max_char_idx = idx;
                 // log.warn(
                 //     @src(),
                 //     "row={d}, col_idx={d}: put multi grapheme:  {s} ({any})",
@@ -949,8 +941,8 @@ pub export fn vtermz_fill_buf_row_utf8(
                 // if (row == 7 or row == 8 or row == 37) {
                 //     log.warn(@src(), "row={}, col_idx={}: adding blank space", .{ row, col_idx });
                 // }
-                buf[idx] = 0x00;
-                // idx += 1;
+                buf[idx] = ' ';
+                idx += 1;
             },
         }
 
@@ -964,13 +956,7 @@ pub export fn vtermz_fill_buf_row_utf8(
         col_idx += width;
     }
 
-    if (!seen_char) {
-        // No real content, so this should be considered an empty line.
-        buf[0] = 0x00;
-        idx = 0;
-    }
-
-    return idx;
+    return max_char_idx;
 }
 
 pub export fn vtermz_fill_buf_lnum_utf8(
