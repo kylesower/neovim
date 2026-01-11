@@ -441,6 +441,7 @@ typedef struct {
   // int (*sb_popline)(int cols, VTermScreenCell *cells, void *user);
   // int (*sb_clear)(void *user);
 } VTermZCallbacks;
+typedef void VTermZOutputCallback(const char *s, size_t len, void *user);
 
 VTermZ *vtermz_new(uint16_t rows, uint16_t cols);
 void vtermz_screen_set_callbacks(VTermZ *vt, VTermZCallbacks *callbacks, void *user);
@@ -452,7 +453,7 @@ void vtermz_set_utf8(VTermZ *vt, bool is_utf8);
 void vtermz_get_size(const VTermZ *vt, uint16_t *rowsp, uint16_t *colsp);
 void vtermz_set_size(VTermZ *vt, uint16_t rows, uint16_t cols);
 void vtermz_state_set_palette_color(VTermZ *vt, uint8_t index, const VTermColor *col);
-void vtermz_output_set_callback(VTermZ *vt, VTermOutputCallback *func, void *user);
+void vtermz_output_set_callback(VTermZ *vt, VTermZOutputCallback *func, void *user);
 void vtermz_keyboard_key(VTermZ *vtz, VTermKey key, VTermModifier mod);
 void vtermz_mouse_action(
     VTermZ *vt,

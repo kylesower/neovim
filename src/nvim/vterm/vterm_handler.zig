@@ -78,7 +78,7 @@ pub const Handler = struct {
     callbacks: c.VTermZCallbacks = .{},
     cbdata: ?*anyopaque = null,
     // Used to send data back to controlling terminal
-    msg_writer: ?vterm.VTermMsgWriter = null,
+    term_writer: ?vterm.VTermMsgWriter = null,
     // Terminal handle
     // outdata: *anyopaque,
     dcs: DcsHandler,
@@ -95,8 +95,8 @@ pub const Handler = struct {
         };
     }
 
-    pub fn term_send(self: *Handler, msg: []const u8) void {
-        if (self.msg_writer) |w| w.send(msg);
+    pub fn term_output(self: *Handler, msg: []const u8) void {
+        if (self.term_writer) |w| w.output(msg);
     }
 
     pub fn deinit(self: *Handler) void {
@@ -513,7 +513,7 @@ pub const Handler = struct {
                 code,
             },
         );
-        self.term_send(resp);
+        self.term_output(resp);
     }
 
     fn requestModeUnknown(self: *Handler, mode_raw: u16, ansi: bool) !void {
@@ -526,7 +526,7 @@ pub const Handler = struct {
                 mode_raw,
             },
         );
-        self.term_send(resp);
+        self.term_output(resp);
     }
 
     fn colorOperation(
@@ -738,8 +738,8 @@ pub const Handler = struct {
             //     "\x1B[?62;22;52c"
             // else
             //     "\x1B[?62;22c",
-            .primary => self.term_send("\x1B[?62;22;52c"),
-            .secondary => self.term_send("\x1B[>1;10;0c"),
+            .primary => self.term_output("\x1B[?62;22;52c"),
+            .secondary => self.term_output("\x1B[>1;10;0c"),
             else => log.warn(@src(), "unimplemented device attributes req: {}", .{req}),
         }
     }
@@ -752,7 +752,7 @@ pub const Handler = struct {
         var bufw = std.Io.Writer.fixed(&buf);
 
         switch (req) {
-            .operating_status => self.term_send("\x1B[0n"),
+            .operating_status => self.term_output("\x1B[0n"),
 
             .cursor_position => {
                 const pos: struct {
@@ -767,7 +767,7 @@ pub const Handler = struct {
                 };
 
                 bufw.print("\x1B[{};{}R", .{ pos.y + 1, pos.x + 1 }) catch return;
-                self.term_send(bufw.buffered());
+                self.term_output(bufw.buffered());
                 _ = bufw.consumeAll();
             },
 
@@ -776,7 +776,7 @@ pub const Handler = struct {
                 _ = theme_request(&dark, self.cbdata);
                 var theme_buf: [32]u8 = undefined;
                 const msg = try std.fmt.bufPrint(&theme_buf, "\x1b[?997;{}n", .{if (dark) @as(u2, 1) else @as(u2, 2)});
-                self.term_send(msg);
+                self.term_output(msg);
             },
         }
     }
@@ -954,7 +954,7 @@ pub const Handler = struct {
                 // self.messageWriter(msg);
                 // TODO: make sure this works
                 _ = try std.fmt.bufPrint(response[0..prefix_len], prefix_fmt, .{@intFromBool(valid)});
-                self.term_send(response[0..stream.pos]);
+                self.term_output(response[0..stream.pos]);
             },
         }
     }
