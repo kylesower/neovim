@@ -461,7 +461,6 @@ void vtermz_mouse_action(
     size_t row,
     uint16_t col,
     bool pressed,
-    bool released,
     VTermModifier mod
 );
 void vtermz_teardown(void);

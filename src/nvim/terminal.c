@@ -2235,35 +2235,33 @@ static bool send_mouse_event(Terminal *term, int c)
     // program. translate and forward the event
     int button;
     bool pressed = false;
-    bool released = false;
 
-    // TODO: distinguish these events
     switch (c) {
     case K_LEFTDRAG:
     case K_LEFTMOUSE:
       pressed = true; FALLTHROUGH;
     case K_LEFTRELEASE:
-      button = 1; released = true; break;
+      button = 1; break;
     case K_MIDDLEDRAG:
     case K_MIDDLEMOUSE:
       pressed = true; FALLTHROUGH;
     case K_MIDDLERELEASE:
-      button = 2; released = true; break;
+      button = 2; break;
     case K_RIGHTDRAG:
     case K_RIGHTMOUSE:
       pressed = true; FALLTHROUGH;
     case K_RIGHTRELEASE:
-      button = 3; released = true; break;
+      button = 3; break;
     case K_X1DRAG:
     case K_X1MOUSE:
       pressed = true; FALLTHROUGH;
     case K_X1RELEASE:
-      button = 8; released = true; break;
+      button = 8; break;
     case K_X2DRAG:
     case K_X2MOUSE:
       pressed = true; FALLTHROUGH;
     case K_X2RELEASE:
-      button = 9; released = true; break;
+      button = 9; break;
     case K_MOUSEDOWN:
       pressed = true; button = 4; break;
     case K_MOUSEUP:
@@ -2278,14 +2276,10 @@ static bool send_mouse_event(Terminal *term, int c)
       return false;
     }
 
-    if (pressed) {
-      released = false;
-    }
-
     VTermModifier mod = VTERM_MOD_NONE;
     convert_modifiers(&c, &mod);
     // mouse_action(term, button, row, col - offset, pressed, mod);
-    vtermz_mouse_action(term->vtz, (uint8_t)button, (size_t)row, (uint16_t)(col - offset), pressed, released, mod);
+    vtermz_mouse_action(term->vtz, (uint8_t)button, (size_t)row, (uint16_t)(col - offset), pressed, mod);
 
     return false;
   }

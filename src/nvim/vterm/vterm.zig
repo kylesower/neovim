@@ -355,8 +355,9 @@ pub const VTerm = struct {
     keyout_buffer: [VTERM_BUF_DEFAULT_SIZE]u8 = undefined,
     keyout_buffer_w: std.Io.Writer,
     mouse: struct {
-        event_point: ?ghostty_vt.Coordinate,
-    } = .{ .event_point = null },
+        event_point: ?ghostty_vt.Coordinate = null,
+        buttons: u32 = 0,
+    } = .{},
 
     pub fn term_output(self: *VTerm, data: []const u8) void {
         if (self.term_writer) |w| w.output(data);
@@ -647,7 +648,6 @@ pub export fn vtermz_mouse_action(
     row: usize,
     col: u16,
     pressed: bool,
-    released: bool,
     mod: c.VTermModifier,
 ) void {
     // log.warn(
@@ -658,9 +658,25 @@ pub export fn vtermz_mouse_action(
     const mods = vterm_mod_to_ghostty_mod(mod);
 
     // invalid input
-    if (pressed and released) return;
-    const action: enum { press, release, motion } =
-        if (pressed) .press else if (released) .release else .motion;
+    const action: enum { press, motion } =
+        if (pressed) .press else .motion;
+
+    // Logic looted from libvterm to prevent repeat actions for the same button press.
+    // ===============================================================================
+    const old_buttons = vt.mouse.buttons;
+
+    if ((button > 0 and button <= 3) or (button >= 8 and button <= 11)) {
+        if (pressed) {
+            vt.mouse.buttons |= (@as(u32, 1) << @as(u5, @intCast(button - 1)));
+        } else {
+            vt.mouse.buttons &= ~(@as(u32, 1) << @as(u5, @intCast(button - 1)));
+        }
+    }
+
+    if (action == .press and vt.mouse.buttons == old_buttons and (button < 4 or button > 7)) {
+        return;
+    }
+    // ===============================================================================
 
     // Mouse reporting must be enabled by both config and terminal state
 
@@ -686,9 +702,8 @@ pub export fn vtermz_mouse_action(
     }
 
     // Handle scenarios where the mouse position is outside the viewport.
-    // We always report release events no matter where they happen.
     const pos_outside_viewport = row < 0 or col < 0 or row >= vt.t.rows or col >= vt.t.cols;
-    if (action != .release and pos_outside_viewport) return;
+    if (pos_outside_viewport) return;
 
     const viewport_point: ghostty_vt.Coordinate = .{ .x = col, .y = @intCast(row) };
 
@@ -708,13 +723,6 @@ pub export fn vtermz_mouse_action(
         // Determine our initial button value
         if (button == 0) {
             // Null button means motion without a button pressed
-            acc = 3;
-        } else if (action == .release and
-            vt.t.flags.mouse_format != .sgr and
-            vt.t.flags.mouse_format != .sgr_pixels)
-        {
-            // Release is 3. It is NOT 3 in SGR mode because SGR can tell
-            // the application what button was released.
             acc = 3;
         } else {
             acc = switch (button) {
@@ -786,8 +794,8 @@ pub export fn vtermz_mouse_action(
         },
 
         .sgr => {
-            // Final character to send in the CSI
-            const final: u8 = if (action == .release) 'm' else 'M';
+            // Final character to send in the CSI.
+            const final: u8 = if (action == .press) 'M' else 'm';
 
             // Response always is at least 4 chars, so this leaves the
             // remainder for numbers which are very large...
