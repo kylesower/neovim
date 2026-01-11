@@ -176,17 +176,103 @@ pub const Handler = struct {
             // TODO: handle damage for all these erase things. For instance, ^C uses
             // erase_display_below, which doesn't move the cursor down, thus the damage
             // based on cursor calculations is incorrect.
-            .erase_display_below => self.terminal.eraseDisplay(.below, value),
-            .erase_display_above => self.terminal.eraseDisplay(.above, value),
-            .erase_display_complete => self.terminal.eraseDisplay(.complete, value),
-            .erase_display_scrollback => self.terminal.eraseDisplay(.scrollback, value),
-            .erase_display_scroll_complete => self.terminal.eraseDisplay(.scroll_complete, value),
-            .erase_line_right => self.terminal.eraseLine(.right, value),
-            .erase_line_left => self.terminal.eraseLine(.left, value),
-            .erase_line_complete => self.terminal.eraseLine(.complete, value),
-            .erase_line_right_unless_pending_wrap => self.terminal.eraseLine(.right_unless_pending_wrap, value),
-            .delete_chars => self.terminal.deleteChars(value),
-            .erase_chars => self.terminal.eraseChars(value),
+            .erase_display_below => {
+                self.terminal.eraseDisplay(.below, value);
+                self.damage_start = @min(
+                    self.damage_start,
+                    cursor_y_init_abs,
+                );
+                self.damage_end = @intCast(self.terminal.screens.active.pages.total_rows);
+            },
+            .erase_display_above => {
+                self.terminal.eraseDisplay(.above, value);
+                self.damage_start = @min(
+                    self.damage_start,
+                    self.terminal.screens.active.pages.total_rows - self.terminal.rows,
+                );
+                self.damage_end = @max(self.damage_end, @as(c_int, @intCast(cursor_y_init_abs + 1)));
+            },
+            .erase_display_complete => {
+                self.terminal.eraseDisplay(.complete, value);
+                self.damage_start = @min(
+                    self.damage_start,
+                    self.terminal.screens.active.pages.total_rows - self.terminal.rows,
+                );
+                self.damage_end = @intCast(self.terminal.screens.active.pages.total_rows);
+            },
+            // TODO: eraseDisplay
+            .erase_display_scrollback => {
+                self.terminal.eraseDisplay(.scrollback, value);
+            },
+            .erase_display_scroll_complete => {
+                self.terminal.eraseDisplay(.scroll_complete, value);
+            },
+            .erase_line_right => {
+                self.terminal.eraseLine(.right, value);
+                self.damage_start = @min(
+                    self.damage_start,
+                    @as(c_int, @intCast(cursor_y_init_abs)),
+                );
+                self.damage_end = @max(
+                    self.damage_end,
+                    @as(c_int, @intCast(cursor_y_init_abs + 1)),
+                );
+            },
+            .erase_line_left => {
+                self.terminal.eraseLine(.left, value);
+                self.damage_start = @min(
+                    self.damage_start,
+                    @as(c_int, @intCast(cursor_y_init_abs)),
+                );
+                self.damage_end = @max(
+                    self.damage_end,
+                    @as(c_int, @intCast(cursor_y_init_abs + 1)),
+                );
+            },
+            .erase_line_complete => {
+                self.terminal.eraseLine(.complete, value);
+                self.damage_start = @min(
+                    self.damage_start,
+                    @as(c_int, @intCast(cursor_y_init_abs)),
+                );
+                self.damage_end = @max(
+                    self.damage_end,
+                    @as(c_int, @intCast(cursor_y_init_abs + 1)),
+                );
+            },
+            .erase_line_right_unless_pending_wrap => {
+                self.terminal.eraseLine(.right_unless_pending_wrap, value);
+                self.damage_start = @min(
+                    self.damage_start,
+                    @as(c_int, @intCast(cursor_y_init_abs)),
+                );
+                self.damage_end = @max(
+                    self.damage_end,
+                    @as(c_int, @intCast(cursor_y_init_abs + 1)),
+                );
+            },
+            .delete_chars => {
+                self.terminal.deleteChars(value);
+                self.damage_start = @min(
+                    self.damage_start,
+                    @as(c_int, @intCast(cursor_y_init_abs)),
+                );
+                self.damage_end = @max(
+                    self.damage_end,
+                    @as(c_int, @intCast(cursor_y_init_abs + 1)),
+                );
+            },
+            .erase_chars => {
+                self.terminal.eraseChars(value);
+                self.damage_start = @min(
+                    self.damage_start,
+                    @as(c_int, @intCast(cursor_y_init_abs)),
+                );
+                self.damage_end = @max(
+                    self.damage_end,
+                    @as(c_int, @intCast(cursor_y_init_abs + 1)),
+                );
+            },
             .insert_lines => self.terminal.insertLines(value),
             .insert_blanks => self.terminal.insertBlanks(value),
             .delete_lines => self.terminal.deleteLines(value),
@@ -241,9 +327,9 @@ pub const Handler = struct {
             .active_status_display => self.terminal.status_display = value,
             .decaln => try self.terminal.decaln(),
             .full_reset => {
-              self.terminal.fullReset();
-              self.damage_start = 0;
-              self.damage_end = @intCast(self.terminal.screens.active.pages.total_rows);
+                self.terminal.fullReset();
+                self.damage_start = 0;
+                self.damage_end = @intCast(self.terminal.screens.active.pages.total_rows);
             },
             .start_hyperlink => try self.terminal.screens.active.startHyperlink(value.uri, value.id),
             .end_hyperlink => {
