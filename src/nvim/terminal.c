@@ -1507,7 +1507,7 @@ void terminal_get_line_attributes(Terminal *term, win_T *wp, int linenr, int *te
         // TODO: make this more efficient. Very unfortunate that the URL set uses C strings.
         // Perhaps something can be done in the vterm_handler.zig to maintain its own set of
         // URLs and save the attr IDs (or via callback).
-        char *uri = "file:///tmp/rand.txt"; // xmemdupz(style.uri, style.uri_len);
+        char *uri = xmemdupz(style.uri, style.uri_len);
         uri_attr_id = hl_add_url(0, uri);
         attr_id = hl_combine_attr(attr_id, uri_attr_id);
         // XFREE_CLEAR(uri);
