@@ -315,6 +315,7 @@ pub fn build(b: *std.Build) !void {
     if (b.lazyDependency("ghostty", .{
         .target = target,
         .optimize = optimize,
+        // TODO: look into SIMD option
     })) |dep| {
         terminal_lib.root_module.addImport("ghostty-vt", dep.module("ghostty-vt"));
     }

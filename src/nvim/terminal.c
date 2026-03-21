@@ -627,6 +627,7 @@ void terminal_open(Terminal **termpp, buf_T *buf, TerminalOptions opts)
   aco_save_T aco;
   aucmd_prepbuf(&aco, buf);
 
+  vtermz_refresh(term->vtz);
   refresh_screen(term, buf);
   set_option_value(kOptBuftype, STATIC_CSTR_AS_OPTVAL("terminal"), OPT_LOCAL);
 

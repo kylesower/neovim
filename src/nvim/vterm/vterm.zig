@@ -412,7 +412,6 @@ pub export fn vtermz_new(rows: u16, cols: u16) callconv(.c) *VTerm {
 
 // DONE
 pub export fn vtermz_free(vt: *VTerm) callconv(.c) void {
-    // TODO: find out what's leaking
     vt.t.deinit(vt.allocator);
     vt.rs.deinit(vt.allocator);
     vt.s.deinit();
@@ -923,7 +922,6 @@ pub export fn vtermz_fill_buf_row_utf8(
                 // );
             },
             .codepoint_grapheme => {
-                // TODO: handle links.
                 // TODO: keycap emojis seem to not work in a nested nvim
                 idx += std.unicode.utf8Encode(cell_raw.content.codepoint, buf[idx..buf_max_len]) catch return idx;
                 for (grapheme) |g| {
@@ -974,8 +972,10 @@ pub export fn vtermz_fill_buf_lnum_utf8(
         return 0;
     }
     // log.warn(@src(), "getting lnum style for lnum={}", .{lnum});
-    // TODO: I'm not sure how to avoid this if the caller needs to request arbitrary
-    // line numbers. Getting the scrollbar every time is potentially expensive.
+    // TODO: make sure this operation isn't too expensive. I believe the scrollbar
+    // should be cached by ghosttty most of the time with how this function gets called.
+    // The documentation warns that it can be expensive to calculate depending
+    // on the circumstances.
     const sb = vt.t.screens.active.pages.scrollbar();
     const to_scroll = @as(isize, @intCast(lnum)) - @as(isize, @intCast(sb.offset));
     // log.warn(@src(), "sb: {any}, to_scroll={}", .{ sb, to_scroll });
@@ -984,8 +984,6 @@ pub export fn vtermz_fill_buf_lnum_utf8(
         // log.warn(@src(), "lnum exists at row {}, no scroll necessary", .{to_scroll});
         break :blk vtermz_fill_buf_row_utf8(vt, @intCast(to_scroll), start_col, end_col, buf, buf_max_len);
     } else blk: {
-        // TODO: I'm not sure how to avoid this if the caller needs to request arbitrary
-        // line numbers. This is terrible.
         // log.warn(@src(), "scrolling {}", .{to_scroll});
         vt.t.scrollViewport(.{ .delta = to_scroll }) catch {};
         vtermz_refresh(vt);
@@ -1046,8 +1044,6 @@ pub export fn vtermz_fill_buf_row_style(
         // }
     }
 
-    // TODO: Speed up hyperlinks. Not sure if the problem is here or elsewhere. Try a for loop
-    // with 100 `ls --hyperlink` to see.
     // Most of the time the row won't have any hyperlinks
     if (row_data.raw.hyperlink) {
         const link_page = row_data.pin.node.data;
@@ -1120,11 +1116,12 @@ pub export fn vtermz_update(vt: *VTerm) callconv(.c) void {
 
 pub export fn vtermz_get_size(vt: *const VTerm, rowsp: ?*u16, colsp: ?*u16) callconv(.c) void {
     // TODO: should this be the vt.rs size or vt.t size?
+    log.warn(@src(), "getting size. rows={}, cols={}", .{ vt.rs.rows, vt.rs.cols });
     if (rowsp) |row| {
-        row.* = vt.t.rows;
+        row.* = vt.rs.rows;
     }
     if (colsp) |col| {
-        col.* = vt.t.cols;
+        col.* = vt.rs.cols;
     }
 }
 
