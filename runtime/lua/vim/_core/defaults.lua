@@ -1089,6 +1089,21 @@ do
         end)
       end
     end
+
+    -- https://ghostty.org/docs/vt/osc/4
+    -- https://ghostty.org/docs/vt/osc/104
+    vim.api.nvim_create_autocmd('TermRequest', {
+      group = group,
+      desc = 'Handle OSC 4 and OSC 104 color palette requests by forwarding to the host TTY',
+      callback = function(ev)
+        if
+          string.match(ev.data.sequence, '\027]4;') or string.match(ev.data.sequence, '\027]104;')
+        then
+          print('got sequence ' .. ev.data.sequence)
+          vim.api.nvim_ui_send(ev.data.sequence .. '\007')
+        end
+      end,
+    })
   end
 
   if tty then

@@ -348,7 +348,7 @@ static int on_osc(int command, VTermStringFragment frag, void *user)
 {
   Terminal *term = user;
 
-  if (frag.str == NULL || frag.len == 0) {
+  if (frag.str == NULL) {
     return 0;
   }
 
@@ -360,6 +360,9 @@ static int on_osc(int command, VTermStringFragment frag, void *user)
     kv_size(term->termrequest_buffer) = 0;
     kv_printf(term->termrequest_buffer, "\x1b]%d;", command);
   }
+
+  // NOTE: some OSC commands have 0 length string fragments. For instance,
+  // OSC 104 has no string argument when resetting all palette colors.
   kv_concat_len(term->termrequest_buffer, frag.str, frag.len);
   if (frag.final) {
     term->termrequest_terminator = frag.terminator;
