@@ -699,14 +699,14 @@ void terminal_open(Terminal **termpp, buf_T *buf)
   aco_save_T aco;
   aucmd_prepbuf(&aco, buf);
 
-  // TODO: check if I still need this if statement
-  if (term->sb_buffer != NULL) {
-    // If scrollback has been allocated by autocommands between terminal_alloc()
-    // and terminal_open(), it also needs to be refreshed.
-    refresh_scrollback(term, buf);
-  } else {
-    assert(term->invalid_start >= 0);
-  }
+  // // TODO: check if I still need this if statement
+  // if (term->sb_buffer != NULL) {
+  //   // If scrollback has been allocated by autocommands between terminal_alloc()
+  //   // and terminal_open(), it also needs to be refreshed.
+  //   refresh_scrollback(term, buf);
+  // } else {
+  //   assert(term->invalid_start >= 0);
+  // }
 
   vtermz_refresh(term->vtz);
   refresh_screen(term, buf);
@@ -2913,41 +2913,41 @@ static void refresh_scrollback(Terminal *term, buf_T *buf)
   term->old_sb_deleted = term->sb_deleted;
 
   // TODO: figure out what parts of the below I actually need, if any
-  int old_height = term->old_height;
-  int width, height;
-  vterm_get_size(term->vt, &height, &width);
-
-  // Remove deleted scrollback lines at the top, but don't unnecessarily remove
-  // lines that will be overwritten by refresh_screen().
-  while (deleted > 0 && buf->b_ml.ml_line_count > old_height) {
-    ml_delete_buf(buf, 1, false);
-    deleted_lines_buf(buf, 1, 1);
-    deleted--;
-  }
-
-  // Clamp old_height in case buffer lines have been deleted by the user.
-  old_height = MIN(old_height, buf->b_ml.ml_line_count);
-  while (term->sb_pending > 0) {
-    // This means that either the window height has decreased or the screen
-    // became full and libvterm had to push all rows up. Convert the first
-    // pending scrollback row into a string and append it just above the visible
-    // section of the buffer.
-    fetch_row(term, -term->sb_pending, width);
-    int buf_index = buf->b_ml.ml_line_count - old_height;
-    ml_append_buf(buf, buf_index, term->textbuf, 0, false);
-    appended_lines_buf(buf, buf_index, 1);
-    term->sb_pending--;
-  }
-
-  int max_line_count = (int)term->sb_current + height;
-  // Remove extra lines at the bottom.
-  while (buf->b_ml.ml_line_count > max_line_count) {
-    ml_delete_buf(buf, buf->b_ml.ml_line_count, false);
-    deleted_lines_buf(buf, buf->b_ml.ml_line_count, 1);
-  }
-
-  adjust_scrollback(term, buf);
-
+  // int old_height = term->old_height;
+  // int width, height;
+  // vterm_get_size(term->vt, &height, &width);
+  //
+  // // Remove deleted scrollback lines at the top, but don't unnecessarily remove
+  // // lines that will be overwritten by refresh_screen().
+  // while (deleted > 0 && buf->b_ml.ml_line_count > old_height) {
+  //   ml_delete_buf(buf, 1, false);
+  //   deleted_lines_buf(buf, 1, 1);
+  //   deleted--;
+  // }
+  //
+  // // Clamp old_height in case buffer lines have been deleted by the user.
+  // old_height = MIN(old_height, buf->b_ml.ml_line_count);
+  // while (term->sb_pending > 0) {
+  //   // This means that either the window height has decreased or the screen
+  //   // became full and libvterm had to push all rows up. Convert the first
+  //   // pending scrollback row into a string and append it just above the visible
+  //   // section of the buffer.
+  //   fetch_row(term, -term->sb_pending, width);
+  //   int buf_index = buf->b_ml.ml_line_count - old_height;
+  //   ml_append_buf(buf, buf_index, term->textbuf, 0, false);
+  //   appended_lines_buf(buf, buf_index, 1);
+  //   term->sb_pending--;
+  // }
+  //
+  // int max_line_count = (int)term->sb_current + height;
+  // // Remove extra lines at the bottom.
+  // while (buf->b_ml.ml_line_count > max_line_count) {
+  //   ml_delete_buf(buf, buf->b_ml.ml_line_count, false);
+  //   deleted_lines_buf(buf, buf->b_ml.ml_line_count, 1);
+  // }
+  //
+  // adjust_scrollback(term, buf);
+  //
   term->opts.read_pause_cb(false, term->opts.data);
 }
 
