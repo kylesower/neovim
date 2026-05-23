@@ -37,7 +37,7 @@
 static TUIData *tui = NULL;
 static int tui_width = 0;
 static int tui_height = 0;
-static char *tui_term = "";
+static const char *tui_term = "";
 static bool tui_rgb = false;
 
 // uncrustify:off
@@ -84,7 +84,7 @@ uint64_t ui_client_start_server(const char *exepath, size_t argc, char **argv)
 }
 
 /// Attaches this client to the UI channel, and sets its client info.
-void ui_client_attach(int width, int height, char *term, bool rgb)
+void ui_client_attach(int width, int height, const char *term, bool rgb)
 {
   //
   // nvim_ui_attach

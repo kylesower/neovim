@@ -496,14 +496,13 @@ TUI:
   - Note: If you want to detect when Nvim is running in a terminal, use
     `has('gui_running')` |has()| or see |nvim_list_uis()| for an example of
     how to inspect the UI channel.
-- Nvim might optionally be compiled with unibilium, in which case the terminfo
-  database will be used. Otherwise, or if the terminal was not found in
-  the database, a table of builtin terminal definitions will be used.
 - Nvim will use 256-colour capability on Linux virtual terminals.  Vim uses
   only 8 colours plus bright foreground on Linux VTs.
 - Vim combines what is in its |builtin-terms| with what it reads from terminfo,
-  and has a 'ttybuiltin' setting to control how that combination works.  Nvim
-  uses one or the other, it does not attempt to merge the two.
+  and has a 'ttybuiltin' setting to control how that combination works. Nvim
+  does not rely on terminfo files. If your term is not defined in
+  |builtin-terms|, it defaults to `ansi`. To apply overrides, use
+  |$NVIM_TERMDEFS|.
 
 UI/Display:
 - |Visual| selection highlights the character at cursor. |visual-use|

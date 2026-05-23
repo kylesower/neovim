@@ -2763,9 +2763,6 @@ static void f_has(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
     "tablineat",
     "tag_binary",
     "termguicolors",
-#ifdef HAVE_UNIBILIUM
-    "terminfo",
-#endif
     "termresponse",
     "textobjects",
     "timers",

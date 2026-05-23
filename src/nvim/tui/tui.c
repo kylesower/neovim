@@ -76,7 +76,7 @@ struct TUIData {
   TermInput input;
   uv_loop_t write_loop;
   TerminfoEntry ti;
-  char *term;  ///< value of $TERM
+  TerminfoTerm term;
   union {
     uv_tty_t tty;
     uv_pipe_t pipe;
@@ -89,7 +89,6 @@ struct TUIData {
   int row, col;
   int out_fd;
   int pending_resize_events;
-  bool terminfo_found_in_db;
   bool can_change_scroll_region;
   bool has_left_and_right_margin_mode;
   bool has_sync_mode;
@@ -156,7 +155,7 @@ static bool cursor_style_enabled = false;
 
 static Set(cstr_t) urls = SET_INIT;
 
-void tui_start(TUIData **tui_p, int *width, int *height, char **term, bool *rgb)
+void tui_start(TUIData **tui_p, int *width, int *height, const char **term, bool *rgb)
   FUNC_ATTR_NONNULL_ALL
 {
   TUIData *tui = xcalloc(1, sizeof(TUIData));
@@ -186,7 +185,7 @@ void tui_start(TUIData **tui_p, int *width, int *height, char **term, bool *rgb)
   loop_poll_events(&main_loop, 1);
   *width = tui->width;
   *height = tui->height;
-  *term = tui->term;
+  *term = term_name(tui->term);
   *rgb = tui->rgb;
 }
 
@@ -358,8 +357,6 @@ void tui_query_bg_color(TUIData *tui)
 
 /// Use $NVIM_TERMDEFS to apply user overrides to terminfo. This is our own homebaked "terminfo",
 /// analogous to Vim's t_xx options. #37274
-///
-/// This also positions us to drop Unibilium entirely.
 static void apply_termdefs(TUIData *tui)
 {
   // We allow empty values just to provide the user with a warning
@@ -484,7 +481,6 @@ static void terminfo_start(TUIData *tui)
   tui->input.tui_data = tui;
 
   tui->ti_arena = (Arena)ARENA_EMPTY;
-  assert(tui->term == NULL);
 
   char *term = os_getenv("TERM");
 #ifdef MSWIN
@@ -497,24 +493,12 @@ static void terminfo_start(TUIData *tui)
   }
 #endif
 
-  // Set up terminfo.
-  tui->terminfo_found_in_db = false;
-  if (term && !os_env_exists("NVIM_TERMDEFS", false)) {
-    if (terminfo_from_database(&tui->ti, term, &tui->ti_arena)) {
-      tui->term = arena_strdup(&tui->ti_arena, term);
-      tui->terminfo_found_in_db = true;
-    }
-  }
-
-  if (!tui->terminfo_found_in_db) {
-    const TerminfoEntry *new = terminfo_from_builtin(term, &tui->term);
-    // we will patch it below, so make a copy
-    memcpy(&tui->ti, new, sizeof tui->ti);
-  }
-
-  // None of the following work over SSH; see :help TERM .
-  char *colorterm = os_getenv("COLORTERM");
+  // None of the following env vars work over SSH; see :help TERM .
   char *termprg = os_getenv("TERM_PROGRAM");
+  const TerminfoEntry *new = terminfo_from_builtin(term, termprg, &tui->term);
+  // we will patch it below, so make a copy
+  memcpy(&tui->ti, new, sizeof tui->ti);
+  char *colorterm = os_getenv("COLORTERM");
   char *vte_version_env = os_getenv("VTE_VERSION");
   char *konsolev_env = os_getenv("KONSOLE_VERSION");
   char *term_program_version_env = os_getenv("TERM_PROGRAM_VERSION");
@@ -713,7 +697,6 @@ static void terminfo_stop(TUIData *tui)
   arena_mem_free(arena_finish(&tui->ti_arena));
   // Avoid using freed memory.
   memset(&tui->ti, 0, sizeof(tui->ti));
-  tui->term = NULL;
 }
 
 static void tui_terminal_start(TUIData *tui)
@@ -1389,10 +1372,10 @@ static CursorShape tui_cursor_decode_shape(const char *shape_str)
 }
 
 /// Reset terminal cursor style. This may be different across terminals and
-/// terminal configs. Also, it depends on what escape sequence Unibilium or
-/// terminfo_builtin.h have set for kTerm_reset_cursor_style (which can also
-/// depend on other runtime logic). It doesn't necessarily send out a
-/// `\x1b[0 q` (terminal default) sequence.
+/// terminal configs. It depends on what escape sequence terminfo_builtin.h has
+/// set for kTerm_reset_cursor_style, and what patches are applied to the
+/// terminfo. It doesn't necessarily send out a `\x1b[0 q` (terminal default)
+/// sequence.
 /// See https://ghostty.org/docs/vt/csi/decscusr for more details.
 static void tui_cursor_reset_style(TUIData *tui)
 {
@@ -1747,7 +1730,7 @@ static void show_verbose_terminfo(TUIData *tui)
   ADD_C(title, CSTR_AS_OBJ("Title"));
   ADD_C(chunks, ARRAY_OBJ(title));
   MAXSIZE_TEMP_ARRAY(info, 1);
-  String str = terminfo_info_msg(&tui->ti, tui->term, tui->terminfo_found_in_db);
+  String str = terminfo_info_msg(&tui->ti, tui->term);
   ADD_C(info, STRING_OBJ(str));
   ADD_C(chunks, ARRAY_OBJ(info));
   MAXSIZE_TEMP_ARRAY(end_fold, 2);
@@ -1792,7 +1775,7 @@ static void tui_suspend_cb(TUIData *tui)
     tui_mouse_on(tui);
   }
   stream_set_blocking(tui->input.in_fd, false);  // libuv expects this
-  ui_client_attach(tui->width, tui->height, tui->term, tui->rgb);
+  ui_client_attach(tui->width, tui->height, term_name(tui->term), tui->rgb);
 }
 #endif
 
@@ -2149,7 +2132,7 @@ static bool term_has_truecolor(TUIData *tui, const char *colorterm)
   return setrgbf && setrgbb;
 }
 
-/// Patches the terminfo records after loading from system or built-in db.
+/// Patches the terminfo records after loading from built-in db.
 /// Several entries in terminfo are known to be deficient or outright wrong;
 /// and several terminal emulators falsely announce incorrect terminal types.
 static void patch_terminfo_bugs(TUIData *tui, const char *term, const char *colorterm,
@@ -2185,6 +2168,7 @@ static void patch_terminfo_bugs(TUIData *tui, const char *term, const char *colo
                                && strstr(colorterm, "mate-terminal");
   bool true_xterm = xterm && !!xterm_version && !bsdvt;
   bool cygwin = terminfo_is_term_family(term, "cygwin");
+  bool ghostty = tui->term == kTermTerm_ghostty;
 
   const char *fix_normal = tui->ti.defs[kTerm_cursor_normal];
   if (fix_normal) {
@@ -2344,74 +2328,60 @@ static void patch_terminfo_bugs(TUIData *tui, const char *term, const char *colo
   // Dickey ncurses terminfo includes Ss/Se capabilities since 2011-07-14. So
   // adding them to terminal types, that have such control sequences but lack
   // the correct terminfo entries, is a fixup, not an augmentation.
-  if (tui->ti.defs[kTerm_set_cursor_style] == NULL) {
-    // DECSCUSR (cursor shape) is widely supported.
-    // https://github.com/gnachman/iTerm2/pull/92
-    if ((!bsdvt && (!konsolev || konsolev >= 180770))
-        && ((xterm && !vte_version)  // anything claiming xterm compat
-            // per MinTTY 0.4.3-1 release notes from 2009
-            || putty
-            // per https://chromium.googlesource.com/apps/libapps/+/a5fb83c190aa9d74f4a9bca233dac6be2664e9e9/hterm/doc/ControlSequences.md
-            || hterm
-            // per https://bugzilla.gnome.org/show_bug.cgi?id=720821
-            || (vte_version >= 3900)
-            || (konsolev >= 180770)  // #9364
-            || tmux       // per tmux manual page
-            // https://lists.gnu.org/archive/html/screen-devel/2013-03/msg00000.html
-            || screen
-            || st         // #7641
-            || rxvt       // per command.C
-            // per analysis of VT100Terminal.m
-            || iterm || iterm_pretending_xterm
-            || teraterm   // per TeraTerm "Supported Control Functions" doco
-            || alacritty  // https://github.com/jwilm/alacritty/pull/608
-            || cygwin
-            || foot
-            // Some linux-type terminals implement the xterm extension.
-            // Example: console-terminal-emulator from the nosh toolset.
-            || (linuxvt
-                && (xterm_version || (vte_version > 0) || colorterm)))) {
-      terminfo_set_str(tui, kTerm_set_cursor_style, "\x1b[%p1%d q");
-      terminfo_set_str(tui, kTerm_reset_cursor_style, "\x1b[ q");
-    } else if (linuxvt) {
-      // Linux uses an idiosyncratic escape code to set the cursor shape and
-      // does not support DECSCUSR.
-      // See http://linuxgazette.net/137/anonymous.html for more info
-      terminfo_set_str(tui, kTerm_set_cursor_style,
-                       "\x1b[?"
-                       "%?"
-                       // The parameter passed to Ss is the DECSCUSR parameter, so the
-                       // terminal capability has to translate into the Linux idiosyncratic
-                       // parameter.
-                       //
-                       // linuxvt only supports block and underline. It is also only
-                       // possible to have a steady block (no steady underline)
-                       "%p1%{2}%<" "%t%{8}"       // blink block
-                       "%e%p1%{2}%=" "%t%{112}"   // steady block
-                       "%e%p1%{3}%=" "%t%{4}"     // blink underline (set to half block)
-                       "%e%p1%{4}%=" "%t%{4}"     // steady underline
-                       "%e%p1%{5}%=" "%t%{2}"     // blink bar (set to underline)
-                       "%e%p1%{6}%=" "%t%{2}"     // steady bar
-                       "%e%{0}"                   // anything else
-                       "%;" "%dc");
-      terminfo_set_str(tui, kTerm_reset_cursor_style, "\x1b[?c");
-    } else if (konsolev > 0 && konsolev < 180770) {
-      // Konsole before version 18.07.70: set up a nonce profile. This has
-      // side effects on temporary font resizing. #6798
-      terminfo_set_str(tui, kTerm_set_cursor_style,
-                       TMUX_WRAP(tmux,
-                                 "\x1b]50;CursorShape=%?"
-                                 "%p1%{3}%<" "%t%{0}"    // block
-                                 "%e%p1%{5}%<" "%t%{2}"  // underline
-                                 "%e%{1}"                // everything else is bar
-                                 "%;%d;BlinkingCursorEnabled=%?"
-                                 "%p1%{1}%<" "%t%{1}"  // Fortunately if we exclude zero as special,
-                                 "%e%p1%{1}%&"  // in all other cases we can treat bit #0 as a flag.
-                                 "%;%d\x07"));
-      terminfo_set_str(tui, kTerm_reset_cursor_style, "\x1b]50;\x07");
-    } else {
-      tui->ti.defs[kTerm_reset_cursor_style] = NULL;
-    }
+  // DECSCUSR (cursor shape) is widely supported.
+  // https://github.com/gnachman/iTerm2/pull/92
+  if (!bsdvt
+      && (xterm         // anything claiming xterm compat
+          // per MinTTY 0.4.3-1 release notes from 2009
+          || putty
+          // per https://chromium.googlesource.com/apps/libapps/+/a5fb83c190aa9d74f4a9bca233dac6be2664e9e9/hterm/doc/ControlSequences.md
+          || hterm
+          // per https://bugzilla.gnome.org/show_bug.cgi?id=720821
+          || vte_version
+          || konsolev   // #9364
+          || tmux       // per tmux manual page
+          // https://lists.gnu.org/archive/html/screen-devel/2013-03/msg00000.html
+          || screen
+          || st         // #7641
+          || rxvt       // per command.C
+          // per analysis of VT100Terminal.m
+          || iterm || iterm_pretending_xterm
+          || teraterm   // per TeraTerm "Supported Control Functions" doco
+          || alacritty  // https://github.com/jwilm/alacritty/pull/608
+          || cygwin
+          || foot
+          // Some linux-type terminals implement the xterm extension.
+          // Example: console-terminal-emulator from the nosh toolset.
+          || (linuxvt
+              && (xterm_version || colorterm)))) {
+    terminfo_set_str(tui, kTerm_set_cursor_style, "\x1b[%p1%d q");
+    terminfo_set_str(tui, kTerm_reset_cursor_style, "\x1b[ q");
+  } else if (linuxvt) {
+    // Linux uses an idiosyncratic escape code to set the cursor shape and
+    // does not support DECSCUSR.
+    // See http://linuxgazette.net/137/anonymous.html for more info
+    terminfo_set_str(tui, kTerm_set_cursor_style,
+                     "\x1b[?"
+                     "%?"
+                     // The parameter passed to Ss is the DECSCUSR parameter, so the
+                     // terminal capability has to translate into the Linux idiosyncratic
+                     // parameter.
+                     //
+                     // linuxvt only supports block and underline. It is also only
+                     // possible to have a steady block (no steady underline)
+                     "%p1%{2}%<" "%t%{8}"       // blink block
+                     "%e%p1%{2}%=" "%t%{112}"   // steady block
+                     "%e%p1%{3}%=" "%t%{4}"     // blink underline (set to half block)
+                     "%e%p1%{4}%=" "%t%{4}"     // steady underline
+                     "%e%p1%{5}%=" "%t%{2}"     // blink bar (set to underline)
+                     "%e%p1%{6}%=" "%t%{2}"     // steady bar
+                     "%e%{0}"                   // anything else
+                     "%;" "%dc");
+    terminfo_set_str(tui, kTerm_reset_cursor_style, "\x1b[?c");
+  } else if (kitty       // https://github.com/kovidgoyal/kitty/pull/9929
+             || ghostty  // https://github.com/ghostty-org/ghostty/pull/12487
+             ) {
+    terminfo_set_str(tui, kTerm_reset_cursor_style, "\x1b[ q");
   }
 
   xfree(xterm_version);

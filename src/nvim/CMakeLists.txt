@@ -46,12 +46,6 @@ if(ENABLE_LIBINTL)
   target_link_libraries(main_lib INTERFACE libintl)
 endif()
 
-if(ENABLE_UNIBILIUM)
-  find_package(Unibilium 2.0 REQUIRED)
-  target_compile_definitions(nvim_bin PRIVATE HAVE_UNIBILIUM)
-  target_link_libraries(main_lib INTERFACE unibilium)
-endif()
-
 if(ENABLE_WASMTIME)
   find_package(Wasmtime 36.0.6 EXACT REQUIRED)
   target_link_libraries(main_lib INTERFACE wasmtime)

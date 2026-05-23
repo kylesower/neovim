@@ -137,9 +137,6 @@ Some can be auto-bumped by `scripts/bump_deps.lua`.
 * [lua-compat](https://github.com/keplerproject/lua-compat-5.3)
 * [tree-sitter](https://github.com/tree-sitter/tree-sitter)
 * [treesitter parsers](https://github.com/neovim/neovim/blob/7e97c773e3ba78fcddbb2a0b9b0d572c8210c83e/cmake.deps/deps.txt#L47-L62)
-* (Deprecated) [unibilium](https://github.com/neovim/unibilium)
-    * The original project [was abandoned](https://github.com/neovim/neovim/issues/10302), so the [neovim/unibilium](https://github.com/neovim/unibilium) fork is considered "upstream" and is maintained on the `master` branch.
-    * **Note:** unibilium is NOT required. See [BUILD.md](./BUILD.md#build-without-unibilium) to build Nvim without unibilium.
 
 ### Vendored dependencies
 
@@ -154,8 +151,8 @@ the sources manually:
 * `src/cjson/`: [lua-cjson](https://github.com/openresty/lua-cjson)
 * `src/klib/`: [Klib](https://github.com/attractivechaos/klib)
 * `runtime/lua/vim/inspect.lua`: [inspect.lua](https://github.com/kikito/inspect.lua)
-* `src/nvim/tui/terminfo_defs.h`: terminfo definitions
-    * Run `scripts/update_terminfo.sh` to update these definitions.
+* `src/nvim/tui/terminfo_builtin.h`: builtin terminfo definitions
+    * Run `nvim -ll src/gen/gen_terminfo.lua` to update these definitions.
 * `runtime/lua/vim/lsp/_meta/protocol.lua`: LSP specification
     * Run `src/gen/gen_lsp.lua` to update.
 * `runtime/lua/vim/_meta/lpeg.lua`: LPeg definitions.
