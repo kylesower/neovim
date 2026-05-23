@@ -322,7 +322,6 @@ jobs:
         run: |
           sudo apt-get install -y \
             libluajit-5.1-dev \
-            libunibilium-dev \
             libuv1-dev \
             lua-filesystem \
             lua-lpeg \

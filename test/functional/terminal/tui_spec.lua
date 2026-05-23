@@ -2462,7 +2462,6 @@ describe('TUI', function()
 
   it('in nvim_list_uis(), sets nvim_set_client_info()', function()
     -- $TERM in :terminal.
-    local exp_term = (is_os('bsd') or is_os('win')) and 'xterm' or 'xterm-256color'
     local ui_chan = 1
     local expected = {
       {
@@ -2483,7 +2482,7 @@ describe('TUI', function()
         stdout_tty = true,
         term_background = '',
         term_colors = 256,
-        term_name = exp_term,
+        term_name = 'xterm-256color',
         width = 50,
       },
     }
@@ -3690,24 +3689,16 @@ describe("TUI 't_Co' (terminal colors)", function()
 
   -- screen:
   --
-  -- FreeBSD and Windows fall back to the built-in screen-256colour entry.
   -- Linux and MacOS have a screen entry in external terminfo with 8 colours,
-  -- which is raised to 16 by COLORTERM.
+  -- which is raised to 16 by COLORTERM, but since we don't use system
+  -- terminfo, it uses the screen-256color built-in.
 
   it('TERM=screen no COLORTERM uses 8/256 colors', function()
-    if is_os('freebsd') or is_os('win') then
-      assert_term_colors('screen', nil, 256)
-    else
-      assert_term_colors('screen', nil, 8)
-    end
+    assert_term_colors('screen', nil, 256)
   end)
 
-  it('TERM=screen COLORTERM=screen uses 16/256 colors', function()
-    if is_os('freebsd') or is_os('win') then
-      assert_term_colors('screen', 'screen', 256)
-    else
-      assert_term_colors('screen', 'screen', 16)
-    end
+  it('TERM=screen COLORTERM=screen uses 256 colors', function()
+    assert_term_colors('screen', 'screen', 256)
   end)
 
   it('TERM=screen COLORTERM=screen-256color uses 256 colors', function()

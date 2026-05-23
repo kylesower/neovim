@@ -37,26 +37,15 @@ Nvim guesses the terminal type when it starts (except in |--embed| and
 determines the terminal type.
 
 					*terminfo* *E557* *E558* *E559*
-To display its user interface, Nvim reads a list of "terminal capabilities"
-from the system terminfo database (or builtin defaults if terminfo is not
-found). If that information is wrong, the screen may be messed up or keys may
-not be recognized.
-
-The Unibilium library (used to read terminfo) allows you to override the
-system terminfo with one in the "$HOME/.terminfo/" directory. Building your
-own terminfo is usually as simple as running this:
->
-  curl -LO https://invisible-island.net/datafiles/current/terminfo.src.gz
-  gunzip terminfo.src.gz
-  tic -x terminfo.src
-<
+To display its user interface, Nvim uses a list of "terminal capabilities"
+from the builtin terminfo entry (|builtin-terms|) for the detected terminal. If
+that information is wrong, the screen may be messed up or keys may not be
+recognized.
 
                                                        *$NVIM_TERMDEFS*
 To override the builtin terminfo, set $NVIM_TERMDEFS to a JSON object whose
 keys correspond to one or more of the fields below, each of which will
-override its counterpart (if any) in the builtin terminfo. The system terminfo
-will be skipped entirely: only builtin definitions, plus the $NVIM_TERMDEFS
-overrides, will be used.
+override its counterpart (if any) in the builtin terminfo.
 
 For example, to disable alternate screen, override the "reset the cursor
 style" sequence, and set the <Home> and <S-Home> sequences: >
@@ -78,14 +67,17 @@ or sub-optimal behavior will result (scrolling quirks, wrong colors, etc.).
 
 $TERM is also important because it is forwarded by SSH to the remote session,
 unlike most other environment variables.
-
 >
   For this terminal           Set $TERM to                  |builtin-terms|
   -------------------------------------------------------------------------
+  alacritty                   alacritty                           Y
   ansi                        (unknown)                           Y
+  contour                     contour                             Y
   Ghostty                     ghostty, xterm-ghostty              Y
+  foot                        foot                                Y
   iTerm (original)            iterm, iTerm.app                    N
   iTerm2 (new capabilities)   iterm2, iTerm2.app                  Y
+  kitty                       xterm-kitty                         Y
   Konsole                     konsole-256color                    N
   libvte-based                vte, vte-256color                   Y
    (e.g. GNOME Terminal)      (aliases: gnome, gnome-256color)
@@ -96,6 +88,7 @@ unlike most other environment variables.
   simple terminal (st)        st, st-256color                     Y
   Terminal.app                nsterm                              N
   tmux                        tmux, tmux-256color                 Y
+  WezTerm                     wezterm                             Y
   Windows/ConEmu              conemu                              Y
   Windows/Cygwin-built Nvim   cygwin                              Y
   Windows/Interix             interix                             Y
@@ -103,24 +96,24 @@ unlike most other environment variables.
   Windows/VTP console         vtpcon                              Y
   xterm or compatible         xterm, xterm-256color               Y
 <
+                                                        *$TERM_PROGRAM*
+If for some reason you can't set $TERM (e.g. it breaks other programs that
+rely on an "xterm-" prefix), you can set $TERM_PROGRAM for the following
+terminals: >
 
+  Terminal    $TERM_PROGRAM
+  -------------------------
+  Ghostty     ghostty
+  iTerm2      iTerm.app
+  WezTerm     WezTerm
+<
 					*builtin-terms* *builtin_terms*
-Nvim will map |$TERM| to a builtin entry according to the above table if:
-
-- a |terminfo| database is not available on the system
-- no terminfo entry found for the current detected terminal
-- Nvim was built without terminfo support (`has('terminfo')==0`)
-
-The builtin terminfo is not combined with any external terminfo database, nor
-can it be used in preference to one.  You can thus entirely override any
-omissions or out-of-date information in the builtin terminfo database by
-supplying an external one with entries for the terminal type.
-
-For example "TERM=putty-256color" will be mapped to the builtin "putty" entry.
-See also |tui-colors|.
+Nvim will map |$TERM| and |$TERM_PROGRAM| to a builtin entry according to the
+above tables. For example "TERM=putty-256color" will be mapped to the builtin
+"putty" entry. See also |tui-colors|. If the terminal is not recognized as one
+of the builtins, it defaults to "ansi".
 
 Settings depending on terminal			*term-dependent-settings*
-
 If you want to set terminal-dependent options or mappings, you can do this in
 your init.vim.  Example: >vim
 

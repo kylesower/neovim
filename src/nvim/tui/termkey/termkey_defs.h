@@ -2,11 +2,6 @@
 
 #include <stddef.h>
 #include <stdint.h>
-
-#ifdef HAVE_UNIBILIUM
-# include <unibilium.h>
-#endif
-
 #include <uv.h>
 
 #include "nvim/event/defs.h"

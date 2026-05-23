@@ -296,7 +296,7 @@ cmake --build build
 ### Build without "bundled" dependencies
 
 1. Manually install the dependencies:
-    - libuv libluv libutf8proc luajit lua-lpeg tree-sitter tree-sitter-c tree-sitter-lua tree-sitter-markdown tree-sitter-query tree-sitter-vim tree-sitter-vimdoc unibilium
+    - libuv libluv libutf8proc luajit lua-lpeg tree-sitter tree-sitter-c tree-sitter-lua tree-sitter-markdown tree-sitter-query tree-sitter-vim tree-sitter-vimdoc
 2. Run CMake:
    ```bash
    cmake -B build -G Ninja -D CMAKE_BUILD_TYPE=RelWithDebInfo
@@ -329,20 +329,6 @@ to build *with* bundled dependencies. This is supported as follows.
    make deps DEPS_CMAKE_FLAGS=-DUSE_EXISTING_SRC_DIR=ON
    make
    ```
-
-### Build without unibilium
-
-Unibilium is the only dependency which is licensed under LGPLv3 (there are no
-GPLv3-only dependencies). This library is used for loading the terminfo database at
-runtime, and can be disabled if the internal definitions for common terminals
-are good enough. To avoid this dependency, build with support for loading
-custom terminfo at runtime, use
-
-```bash
-make CMAKE_EXTRA_FLAGS="-DENABLE_UNIBILIUM=0" DEPS_CMAKE_FLAGS="-DUSE_BUNDLED_UNIBILIUM=0"
-```
-
-To confirm at runtime that unibilium was not included, check `has('terminfo') == 1`.
 
 ### Build with specific "bundled" dependencies
 
@@ -478,7 +464,7 @@ or a specific SHA1 like `--override-input neovim-src github:neovim/neovim/89dc8f
 
 Some deps can be pulled from haiku repos, the rest need "bundled" deps:
 ```bash
-cmake -DUSE_BUNDLED_LIBUV=OFF -DUSE_BUNDLED_UNIBILIUM=OFF -DUSE_BUNDLED_LUAJIT=OFF -B .deps ./cmake.deps
+cmake -DUSE_BUNDLED_LIBUV=OFF -DUSE_BUNDLED_LUAJIT=OFF -B .deps ./cmake.deps
 make -C .deps
 ```
 

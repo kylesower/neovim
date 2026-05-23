@@ -13,7 +13,6 @@ local repos = {
   'luajit/luajit',
   'libuv/libuv',
   'luvit/luv',
-  'neovim/unibilium',
   'juliastrings/utf8proc',
   'tree-sitter/tree-sitter',
   'tree-sitter/tree-sitter-c',
@@ -31,7 +30,6 @@ local zig_mode = {
   uncrustify = false,
   wasmtime = false,
   libuv = false,
-  unibilium = 'nested',
   utf8proc = 'nested',
 }
 

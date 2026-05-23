@@ -21,7 +21,6 @@ pub const SystemIntegrationOptions = packed struct {
     lpeg: bool,
     lua: bool,
     tree_sitter: bool,
-    unibilium: bool,
     utf8proc: bool,
     uv: bool,
 };
@@ -57,8 +56,6 @@ pub fn build(b: *std.Build) !void {
     // without cross_compiling we like to reuse libluv etc at the same optimize level
     const optimize_host = if (cross_compiling) .ReleaseSafe else optimize;
 
-    const use_unibilium = b.option(bool, "unibilium", "use unibilium") orelse true;
-
     // puc lua 5.1 is not ReleaseSafe "safe"
     const optimize_lua = if (optimize == .Debug or optimize == .ReleaseSafe) .ReleaseSmall else optimize;
 
@@ -71,7 +68,6 @@ pub fn build(b: *std.Build) !void {
         .lpeg = b.systemIntegrationOption("lpeg", .{}),
         .lua = b.systemIntegrationOption("lua", .{}),
         .tree_sitter = b.systemIntegrationOption("tree-sitter", .{}),
-        .unibilium = b.systemIntegrationOption("unibilium", .{}),
         .utf8proc = b.systemIntegrationOption("utf8proc", .{}),
         .uv = b.systemIntegrationOption("uv", .{}),
     };
@@ -139,10 +135,6 @@ pub fn build(b: *std.Build) !void {
         .target = target,
         .optimize = optimize,
     });
-    const unibilium = if (use_unibilium and !sys_opts.unibilium) b.lazyDependency("unibilium", .{
-        .target = target,
-        .optimize = optimize,
-    }) else null;
 
     // TODO(bfredl): fix upstream bugs with UBSAN
     const optimize_ts = .ReleaseFast;
@@ -394,13 +386,6 @@ pub fn build(b: *std.Build) !void {
     } else if (utf8proc) |dep| {
         try unittest_include_path.append(b.allocator, dep.artifact("utf8proc").getEmittedIncludeTree());
     }
-    if (use_unibilium) {
-        if (sys_opts.unibilium) {
-            try appendSystemIncludePath(b, &unittest_include_path, "unibilium");
-        } else if (unibilium) |dep| {
-            try unittest_include_path.append(b.allocator, dep.artifact("unibilium").getEmittedIncludeTree());
-        }
-    }
     if (sys_opts.tree_sitter) {
         try appendSystemIncludePath(b, &unittest_include_path, "tree-sitter");
     } else if (treesitter) |dep| {
@@ -463,13 +448,6 @@ pub fn build(b: *std.Build) !void {
     } else if (utf8proc) |dep| {
         nvim_mod.linkLibrary(dep.artifact("utf8proc"));
     }
-    if (use_unibilium) {
-        if (sys_opts.unibilium) {
-            nvim_mod.linkSystemLibrary("unibilium", .{});
-        } else if (unibilium) |dep| {
-            nvim_mod.linkLibrary(dep.artifact("unibilium"));
-        }
-    }
     if (sys_opts.tree_sitter) {
         nvim_mod.linkSystemLibrary("tree-sitter", .{});
     } else if (treesitter) |dep| {
@@ -511,7 +489,6 @@ pub fn build(b: *std.Build) !void {
         if (is_windows) "-DMSWIN" else "",
         if (is_windows) "-DWIN32_LEAN_AND_MEAN" else "",
         if (is_windows) "-DUTF8PROC_STATIC" else "",
-        if (use_unibilium) "-DHAVE_UNIBILIUM" else "",
     };
     nvim_mod.addCSourceFiles(.{ .files = src_paths, .flags = &flags });
 

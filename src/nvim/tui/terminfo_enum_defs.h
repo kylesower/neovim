@@ -81,3 +81,28 @@ typedef enum {
   kTermKey_right,
   kTermKeyCount,
 } TerminfoKey;
+
+typedef enum {
+  kTermTerm_alacritty,
+  kTermTerm_ansi,
+  kTermTerm_conemu,
+  kTermTerm_contour,
+  kTermTerm_cygwin,
+  kTermTerm_foot,
+  kTermTerm_ghostty,
+  kTermTerm_interix,
+  kTermTerm_iterm2,
+  kTermTerm_kitty,
+  kTermTerm_linux,
+  kTermTerm_putty,
+  kTermTerm_rxvt,
+  kTermTerm_screen,
+  kTermTerm_st,
+  kTermTerm_tmux,
+  kTermTerm_vte,
+  kTermTerm_vtpcon,
+  kTermTerm_wezterm,
+  kTermTerm_win32con,
+  kTermTerm_xterm,
+  kTermTermCount,
+} TerminfoTerm;

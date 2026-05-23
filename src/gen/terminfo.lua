@@ -5,22 +5,94 @@ M.fields.bools = { 'back_color_erase', 'Tc', 'RGB', 'Su' }
 M.fields.ints = { 'max_colors', 'lines', 'columns' }
 
 M.builtin_terminals = {
-  { 'ansi', 'ansi_terminfo' },
-  { 'ghostty', 'ghostty_terminfo' }, -- Note: ncurses defs do not exactly match what ghostty ships.
-  { 'interix', 'interix_8colour_terminfo' },
-  { 'iterm2', 'iterm_256colour_terminfo' },
-  { 'linux', 'linux_16colour_terminfo' },
-  { 'putty-256color', 'putty_256colour_terminfo' },
-  { 'rxvt-256color', 'rxvt_256colour_terminfo' },
-  { 'screen-256color', 'screen_256colour_terminfo' },
-  { 'st-256color', 'st_256colour_terminfo' },
-  { 'tmux-256color', 'tmux_256colour_terminfo' },
-  { 'vte-256color', 'vte_256colour_terminfo' },
-  { 'xterm-256color', 'xterm_256colour_terminfo' },
-  { 'cygwin', 'cygwin_terminfo' },
-  { 'win32con', 'win32con_terminfo' },
-  { 'conemu', 'conemu_terminfo' },
-  { 'vtpcon', 'vtpcon_terminfo' },
+  {
+    name = 'alacritty',
+    term = 'alacritty',
+  },
+  {
+    name = 'ansi',
+  },
+  {
+    name = 'conemu',
+    families = { 'conemu' },
+  },
+  {
+    name = 'contour',
+    term = 'contour',
+  },
+  {
+    name = 'cygwin',
+    families = { 'cygwin' },
+  },
+  {
+    name = 'foot',
+    term = 'foot',
+  },
+  {
+    name = 'ghostty',
+    termprg = 'ghostty',
+    term = 'xterm-ghostty',
+    families = { 'ghostty' }, -- ghostty sets TERM to xterm-ghostty by default.
+  },
+  {
+    name = 'interix',
+    families = { 'interix' },
+  },
+  {
+    name = 'iterm2',
+    families = { 'iterm', 'iterm2', 'iTerm.app', 'iTerm2.app' },
+    termprg = 'iTerm.app',
+  },
+  {
+    name = 'kitty',
+    families = {},
+    term = 'xterm-kitty',
+  },
+  {
+    name = 'linux',
+    families = { 'linux' },
+  },
+  {
+    name = 'putty-256color',
+    families = { 'putty' },
+  },
+  {
+    name = 'rxvt-256color',
+    families = { 'rxvt' },
+  },
+  {
+    name = 'screen-256color',
+    families = { 'screen' },
+  },
+  {
+    name = 'st-256color',
+    families = { 'st' },
+  },
+  {
+    name = 'tmux-256color',
+    families = { 'tmux' },
+  },
+  {
+    name = 'vte-256color',
+    families = { 'gnome', 'vte' },
+  },
+  {
+    name = 'vtpcon',
+    families = { 'vtpcon' },
+  },
+  {
+    name = 'wezterm',
+    termprg = 'WezTerm',
+    families = { 'wezterm' },
+  },
+  {
+    name = 'win32con',
+    families = { 'win32con' },
+  },
+  {
+    name = 'xterm-256color',
+    families = { 'xterm' },
+  },
 }
 
 M.fields.strings = {

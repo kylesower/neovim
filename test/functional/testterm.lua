@@ -206,6 +206,9 @@ function M.setup_child_nvim(args, opts)
   local env = opts.env or {}
   env.VIMRUNTIME = env.VIMRUNTIME or os.getenv('VIMRUNTIME')
   env.NVIM_TEST = env.NVIM_TEST or os.getenv('NVIM_TEST')
+  -- We don't want the inherited TERM_PROGRAM from the shell environment to
+  -- break tests since it takes precedence over TERM
+  env.TERM_PROGRAM = env.TERM_PROGRAM or ''
 
   return M.setup_screen(opts.extra_rows, argv, opts.cols, env)
 end

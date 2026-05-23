@@ -3,10 +3,6 @@
 #include <stdbool.h>
 #include <string.h>
 
-#ifdef HAVE_UNIBILIUM
-# include <unibilium.h>
-#endif
-
 #include "klib/kvec.h"
 #include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
@@ -61,163 +57,44 @@ bool terminfo_is_bsd_console(const char *term)
   return false;
 }
 
-/// Loads a built-in terminfo db when we (unibilium) failed to load a terminfo
-/// record from the environment (termcap systems, unrecognized $TERM, …).
-/// We do not attempt to detect xterm pretenders here.
+/// Loads a built-in terminfo db. We do not attempt to detect xterm pretenders
+/// here.
 ///
 /// @param term $TERM value
-/// @param[out,static] termname decided builtin 'term' name
+/// @param termprg $TERM_PROGRAM value
+/// @param[out] ti_term enum representing decided term
 /// @return [allocated] terminfo structure
-const TerminfoEntry *terminfo_from_builtin(const char *term, char **termname)
+const TerminfoEntry *terminfo_from_builtin(const char *term, const char *termprg,
+                                           TerminfoTerm *ti_term)
 {
-  if (strequal(term, "ghostty") || strequal(term, "xterm-ghostty")) {
-    *termname = "ghostty";
-    return &ghostty_terminfo;
-  } else if (terminfo_is_term_family(term, "xterm")) {
-    *termname = "xterm";
-    return &xterm_256colour_terminfo;
-  } else if (terminfo_is_term_family(term, "screen")) {
-    *termname = "screen";
-    return &screen_256colour_terminfo;
-  } else if (terminfo_is_term_family(term, "tmux")) {
-    *termname = "tmux";
-    return &tmux_256colour_terminfo;
-  } else if (terminfo_is_term_family(term, "rxvt")) {
-    *termname = "rxvt";
-    return &rxvt_256colour_terminfo;
-  } else if (terminfo_is_term_family(term, "putty")) {
-    *termname = "putty";
-    return &putty_256colour_terminfo;
-  } else if (terminfo_is_term_family(term, "linux")) {
-    *termname = "linux";
-    return &linux_16colour_terminfo;
-  } else if (terminfo_is_term_family(term, "interix")) {
-    *termname = "interix";
-    return &interix_8colour_terminfo;
-  } else if (terminfo_is_term_family(term, "iterm")
-             || terminfo_is_term_family(term, "iterm2")
-             || terminfo_is_term_family(term, "iTerm.app")
-             || terminfo_is_term_family(term, "iTerm2.app")) {
-    *termname = "iterm";
-    return &iterm_256colour_terminfo;
-  } else if (terminfo_is_term_family(term, "st")) {
-    *termname = "st";
-    return &st_256colour_terminfo;
-  } else if (terminfo_is_term_family(term, "gnome")
-             || terminfo_is_term_family(term, "vte")) {
-    *termname = "vte";
-    return &vte_256colour_terminfo;
-  } else if (terminfo_is_term_family(term, "cygwin")) {
-    *termname = "cygwin";
-    return &cygwin_terminfo;
-  } else if (terminfo_is_term_family(term, "win32con")) {
-    *termname = "win32con";
-    return &win32con_terminfo;
-  } else if (terminfo_is_term_family(term, "conemu")) {
-    *termname = "conemu";
-    return &conemu_terminfo;
-  } else if (terminfo_is_term_family(term, "vtpcon")) {
-    *termname = "vtpcon";
-    return &vtpcon_terminfo;
-  } else {
-    *termname = "ansi";
-    return &ansi_terminfo;
+  for (TerminfoTerm i = 0; i < kTermTermCount; i++) {
+    // TERM_PROGRAM tends to be more accurate than TERM/family if it's defined
+    if (builtin_terms[i].termprg != NULL && strequal(builtin_terms[i].termprg, termprg)) {
+      *ti_term = i;
+      return &builtin_terms[i].terminfo;
+    }
+
+    if (builtin_terms[i].term != NULL && strequal(builtin_terms[i].term, term)) {
+      *ti_term = i;
+      return &builtin_terms[i].terminfo;
+    }
+
+    for (int j = 0; j < TERM_FAMILY_COUNT; j++) {
+      const char *family = builtin_terms[i].families[j];
+      if (family != NULL && terminfo_is_term_family(term, family)) {
+        *ti_term = i;
+        return &builtin_terms[i].terminfo;
+      }
+    }
   }
+
+  *ti_term = kTermTerm_ansi;
+  return &builtin_terms[kTermTerm_ansi].terminfo;
 }
 
-bool terminfo_from_database(TerminfoEntry *ti, char *termname, Arena *arena)
+const char *term_name(TerminfoTerm term)
 {
-#ifdef HAVE_UNIBILIUM
-  unibi_term *ut = unibi_from_term(termname);
-  if (!ut) {
-    return false;
-  }
-
-  ti->back_color_erase = unibi_get_bool(ut, unibi_back_color_erase);
-  ti->max_colors = unibi_get_num(ut, unibi_max_colors);
-  ti->lines = unibi_get_num(ut, unibi_lines);
-  ti->columns = unibi_get_num(ut, unibi_columns);
-
-  // Check for Tc or RGB
-  ti->Tc = false;
-  ti->RGB = false;
-  ti->Su = false;
-  for (size_t i = 0; i < unibi_count_ext_bool(ut); i++) {
-    const char *n = unibi_get_ext_bool_name(ut, i);
-    if (n && !strcmp(n, "Tc")) {
-      ti->Tc = true;
-    } else if (n && !strcmp(n, "RGB")) {
-      ti->RGB = true;
-    } else if (n && !strcmp(n, "Su")) {
-      ti->Su = true;
-    }
-  }
-
-  static const enum unibi_string uni_ids[] = {
-# define X(name) unibi_##name,
-    XLIST_TERMINFO_BUILTIN
-# undef X
-  };
-
-  for (size_t i = 0; i < ARRAY_SIZE(uni_ids); i++) {
-    const char *val = unibi_get_str(ut, uni_ids[i]);
-    ti->defs[i] = val ? arena_strdup(arena, val) : NULL;
-  }
-
-  static const char *uni_ext[] = {
-# define X(informal_name, terminfo_name) #terminfo_name,
-    XLIST_TERMINFO_EXT
-# undef X
-  };
-
-  size_t max = unibi_count_ext_str(ut);
-  for (size_t i = 0; i < ARRAY_SIZE(uni_ext); i++) {
-    const char *name = uni_ext[i];
-    for (size_t val = 0; val < max; val++) {
-      const char *n = unibi_get_ext_str_name(ut, val);
-      if (n && strequal(n, name)) {
-        const char *data = unibi_get_ext_str(ut, val);
-        ti->defs[kTermExtOffset + i] = data ? arena_strdup(arena, data) : NULL;
-        break;
-      }
-    }
-  }
-
-# define X(name) { unibi_key_##name, unibi_string_begin_ },
-# define Y(name) { unibi_key_##name, unibi_key_s##name },
-  static const enum unibi_string uni_keys[][2] = {
-    XYLIST_TERMINFO_KEYS
-  };
-# undef X
-# undef Y
-
-  for (size_t i = 0; i < ARRAY_SIZE(uni_keys); i++) {
-    const char *val = unibi_get_str(ut, uni_keys[i][0]);
-    if (val) {
-      ti->keys[i][0] = arena_strdup(arena, val);
-      if (uni_keys[i][1] != unibi_string_begin_) {
-        const char *sval = unibi_get_str(ut, uni_keys[i][1]);
-        ti->keys[i][1] = sval ? arena_strdup(arena, sval) : NULL;
-      }
-    }
-  }
-
-  static const enum unibi_string uni_fkeys[] = {
-# define X(name, idx) unibi_key_##name,
-    XLIST_TERMINFO_FKEYS
-# undef X
-  };
-
-  for (size_t i = 0; i < ARRAY_SIZE(uni_fkeys); i++) {
-    const char *val = unibi_get_str(ut, uni_fkeys[i]);
-    ti->f_keys[i] = val ? arena_strdup(arena, val) : NULL;
-  }
-
-  unibi_destroy(ut);
-  return true;
-#else
-  return false;
-#endif
+  return builtin_terms[term].name;
 }
 
 static const char *fmt(bool val)
@@ -229,17 +106,11 @@ static const char *fmt(bool val)
 /// Serves a similar purpose as Vim `:set termcap` (removed in Nvim).
 ///
 /// @return allocated string
-String terminfo_info_msg(const TerminfoEntry *ti, const char *termname, bool from_db)
+String terminfo_info_msg(const TerminfoEntry *ti, TerminfoTerm term)
 {
   StringBuilder data = KV_INITIAL_VALUE;
 
-  kv_printf(data, "&term: %s\n", termname);
-  if (from_db) {
-    kv_printf(data, "using terminfo database\n");
-  } else {
-    kv_printf(data, "using builtin terminfo\n");
-  }
-  kv_printf(data, "\n");
+  kv_printf(data, "&term: %s\n\n", term_name(term));
 
   kv_printf(data, "Boolean capabilities:\n");
   kv_printf(data, "  back_color_erase: %s\n", fmt(ti->back_color_erase));
