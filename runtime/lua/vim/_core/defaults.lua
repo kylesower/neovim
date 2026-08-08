@@ -975,11 +975,9 @@ do
     end
 
     -- Wait until detection of OSC 11 capabilities is complete to ensure
-    -- background is automatically set before user config. Sometimes takes a
-    -- while on slow CI systems (Windows).
-    local timeout = os.getenv('NVIM_TEST') and 3000 or 100
+    -- background is automatically set before user config.
     if
-      not vim.wait(timeout, function()
+      not vim.wait(100, function()
         return did_dsr_response
       end, 1)
       -- Don't show the warning when running tests to avoid flakiness.
