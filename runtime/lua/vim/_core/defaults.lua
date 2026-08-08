@@ -964,8 +964,7 @@ do
           if rr and gg and bb then
             local luminance = (0.299 * rr) + (0.587 * gg) + (0.114 * bb)
             local bg = luminance < 0.5 and 'dark' or 'light'
-            -- Use :noautocmd to suppress OptionSet event; OSC11 response may arrive after VimEnter.
-            vim.cmd('noautocmd set background=' .. bg)
+            vim.o.background = bg
           end
         end
       end
@@ -976,9 +975,11 @@ do
     end
 
     -- Wait until detection of OSC 11 capabilities is complete to ensure
-    -- background is automatically set before user config.
+    -- background is automatically set before user config. Sometimes takes a
+    -- while on slow CI systems (Windows).
+    local timeout = os.getenv('NVIM_TEST') and 3000 or 100
     if
-      not vim.wait(100, function()
+      not vim.wait(timeout, function()
         return did_dsr_response
       end, 1)
       -- Don't show the warning when running tests to avoid flakiness.
